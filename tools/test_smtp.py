@@ -1,4 +1,4 @@
-"""Verifica configuración y, con --send, envía un único correo de práctica."""
+"""Verifica configuración y, con --send, envía un único correo de comprobación."""
 import argparse
 import os
 import smtplib
@@ -27,8 +27,8 @@ def main():
     message = EmailMessage()
     message['From'] = os.environ['SMTP_FROM']
     message['To'] = os.environ['SMTP_TEST_TO']
-    message['Subject'] = 'Hotels — prueba de correo universitario'
-    message.set_content('Este es un único mensaje de prueba de Hotels.\nProyecto universitario, sin reservas reales ni afiliación a los hoteles.\nSi lo recibes, confirma la llegada en tu bandeja de entrada o spam.\n')
+    message['Subject'] = 'Hotels — comprobación de correo'
+    message.set_content('Este es un único mensaje de prueba de Hotels.\nEste mensaje comprueba la configuración del servicio de notificaciones.\nSi lo recibes, confirma la llegada en tu bandeja de entrada o spam.\n')
     try:
         mode = os.environ.get('SMTP_SECURITY','starttls').lower()
         context = ssl.create_default_context()

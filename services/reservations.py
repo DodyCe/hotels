@@ -137,7 +137,7 @@ class Reservations(Handler):
                 pass
             row = reservation(rid)
             if row['status'] == 'Rechazada':
-                raise APIError(409,'La habitación de práctica ya no tiene cupos para esas fechas.')
+                raise APIError(409,'La habitación ya no tiene cupos para esas fechas.')
             return self.respond(201 if row['status']=='Confirmada' else 202, {'reservation':public_reservation(row)})
         if self.command == 'POST' and path.startswith('/reservations/') and path.endswith('/cancel'):
             rid = path.split('/')[2]

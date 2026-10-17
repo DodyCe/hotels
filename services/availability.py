@@ -64,7 +64,7 @@ class Availability(Handler):
                         raise APIError(409, 'El identificador ya corresponde a otra asignación.')
                     return self.respond(200, {'allocated': True, 'duplicate': True})
                 if available_units(db,room,a,b) < 1:
-                    raise APIError(409, 'La habitación de práctica no tiene cupos para esas fechas.')
+                    raise APIError(409, 'La habitación no tiene cupos para esas fechas.')
                 db.execute('INSERT INTO allocations VALUES (?,?,?,?,?)', (rid,room,a.isoformat(),b.isoformat(),'Asignada'))
             return self.respond(201, {'allocated': True})
         if self.command == 'POST' and url.path == '/internal/release':
