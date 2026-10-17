@@ -1,5 +1,7 @@
 # Hotels
 
+**Estado de trabajo:** los avances terminados se versionan en GitHub para conservar el historial del proyecto, por autorización del usuario del 17 de octubre de 2026. El despliegue público sigue pendiente hasta completar el frontend y los microservicios con sus bases. Consulta el [historial del proyecto](HISTORIAL_PROYECTO.md) y las [decisiones técnicas](DECISIONES_TECNICAS.md) para preparar el documento final.
+
 Proyecto universitario del Sistema de Reservas Hoteleras, proyecto 6. Esta versión actualiza el boceto HTML/CSS, utiliza referencias de hoteles reales de Montería e incorpora autenticación, reservas, notificaciones, catálogo de hoteles, habitaciones y disponibilidad e inventario mediante seis microservicios locales.
 
 Los establecimientos no participan en la aplicación. Las reservas, tarifas, cupos y capacidades del ejercicio son simulados. Las fotografías de Unsplash son ilustrativas; no muestran los hoteles de Montería mencionados. No se contacta a los hoteles ni se cobran pagos.
@@ -9,10 +11,12 @@ Los establecimientos no participan en la aplicación. Las reservas, tarifas, cup
 1. Extrae la carpeta completa.
 2. Ejecuta `INICIAR.cmd`. Requiere Python 3.12 o superior; también reconoce el Python incluido en este equipo con Codex.
 3. Abre <http://127.0.0.1:8080>. El iniciador abre esa dirección automáticamente cuando se ejecuta desde INICIAR.cmd.
-4. Registra una cuenta y realiza una reserva de práctica.
+4. Registra una cuenta y realiza una reserva.
 5. Consulta «Mis reservas» y la campana de notificaciones. Los mensajes pueden tardar unos segundos en aparecer.
 
-Mantén abierta la consola. Ctrl+C detiene todos los servicios. Para iniciarlo manualmente: `python start.py`. No requiere instalar dependencias de Python.
+Mantén abierta la consola. Ctrl+C detiene todos los servicios. Para iniciarlo manualmente: `python start.py`. El modo SQLite no requiere dependencias adicionales; para PostgreSQL instala `requirements.txt` en `.venv`.
+
+Autenticación y Notificaciones ya están conectados a dos proyectos Supabase independientes. Se migraron los datos anteriores con respaldo y se verificó el flujo completo; los otros cuatro servicios mantienen sus bases SQLite separadas. Consulta [SUPABASE.md](SUPABASE.md) para los proyectos, las conexiones privadas y la migración.
 
 Puedes abrir `web/index.html` directamente para revisar el diseño. Para usar autenticación, reservas y notificaciones debes ejecutar el iniciador. Las fotografías y Google Fonts requieren conexión a internet.
 
@@ -37,13 +41,13 @@ La aplicación genera avisos de bienvenida, confirmación y cancelación. Reserv
 
 «Aceptado por el servidor SMTP» indica aceptación por el proveedor, no entrega comprobada en la bandeja de entrada. Los errores de entrega se reintentan hasta cinco veces y el estado puede consultarse en Notificaciones. Si SMTP está configurado, registrar una cuenta o una reserva puede enviar un correo real al usuario; utiliza cuentas de prueba bajo tu control.
 
-Se preparó `.env` con el servidor público de Gmail; no se completaron usuario, contraseña ni remitente. Se verificó la cola local y sus destinatarios; la entrega a un proveedor externo queda pendiente de tus credenciales.
+En el equipo de elaboración se configuró Gmail en el `.env` privado y el proveedor aceptó un correo real de prueba el 17 de octubre de 2026. Se reinició la aplicación para activar SMTP en los avisos nuevos. El usuario confirmó después la recepción de las notificaciones en Gmail. Esa confirmación no sustituye una captura de evidencia para la entrega; las credenciales no forman parte del repositorio.
 
 ## Seis microservicios implementados
 
-- **Autenticación**, puerto 8101: cuentas, sesiones y correo del usuario. Base `auth.sqlite3`.
+- **Autenticación**, puerto 8101: cuentas, sesiones y correo del usuario. Base PostgreSQL independiente si se configura `AUTH_DATABASE_URL`; de lo contrario, `auth.sqlite3`.
 - **Reservas**, puerto 8103: propietario, fechas, huéspedes, estado e importe confirmado. Base `reservations.sqlite3`.
-- **Notificaciones**, puerto 8102: eventos, destinatario obtenido en Auth y entrega SMTP. Base `notifications.sqlite3`.
+- **Notificaciones**, puerto 8102: eventos, destinatario obtenido en Auth y entrega SMTP. Base PostgreSQL independiente si se configura `NOTIFICATIONS_DATABASE_URL`; de lo contrario, `notifications.sqlite3`.
 - **Catálogo de hoteles**, puerto 8104: establecimientos, direcciones, descripciones, fuentes y créditos de fotografías. Base `catalog.sqlite3`. No almacena habitaciones, precios o disponibilidad.
 - **Habitaciones**, puerto 8105: tipos de habitación, hotel al que pertenecen, capacidad y precio simulado. Base `rooms.sqlite3`.
 - **Disponibilidad e inventario**, puerto 8106: unidades por tipo, ocupación por noche, asignación y liberación idempotentes. Base `availability.sqlite3`.
@@ -87,13 +91,13 @@ El iniciador espera a que termine la migración antes de abrir el Gateway. Repet
 
 El mínimo de cinco microservicios de la guía queda superado con seis. Esto no significa que todos los entregables de la asignatura estén terminados: la documentación formal Swagger/OpenAPI, la validación de Docker y los demás requisitos académicos deben verificarse por separado.
 
-## Autenticación y límites de la práctica
+## Autenticación y alcance actual
 
 Se usan contraseñas derivadas con scrypt y una sal aleatoria por usuario. Las sesiones opacas aleatorias caducan a las ocho horas; solo se guarda su hash y se revocan al cerrar sesión. La cookie es HttpOnly y SameSite=Strict. Este mecanismo es la alternativa a JWT elegida para este prototipo y debe justificarse en la sustentación.
 
 Los servicios internos exigen una clave compartida generada por `start.py`; el frontend nunca la recibe. El Gateway rechaza orígenes externos y las APIs comprueban el propietario de las reservas y mensajes.
 
-Esta implementación está preparada para una demostración local. No incluye recuperación de contraseña, verificación de titularidad del correo ni controles completos de una plataforma pública. Para un despliegue HTTPS se debe configurar `COOKIE_SECURE=1`, `PUBLIC_ORIGIN` y un servidor apropiado; no publiques directamente estos servidores de práctica.
+Esta implementación está preparada para una demostración local. No incluye recuperación de contraseña, verificación de titularidad del correo ni controles completos de una plataforma pública. Para un despliegue HTTPS se debe configurar `COOKIE_SECURE=1`, `PUBLIC_ORIGIN` y un servidor apropiado; el despliegue público requiere revisar la configuración y los controles del entorno de destino.
 
 ## Docker Compose
 
@@ -101,11 +105,11 @@ Se incluye `Dockerfile` y `compose.yaml`. Con Docker disponible:
 
 1. Copia `.env.example` a `.env`.
 2. Asigna a `INTERNAL_API_KEY` una clave aleatoria de al menos 32 caracteres. Puedes generarla con `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
-3. Configura SMTP si deseas envío real.
+3. Configura SMTP si deseas envío real. Para Supabase completa también las dos URL y migra los datos según `SUPABASE.md` antes del arranque.
 4. Ejecuta `docker compose up --build` y abre <http://127.0.0.1:8080>.
 5. Para detener: `docker compose down`. Los volúmenes conservan las cuentas y reservas.
 
-Los servicios internos no publican puertos al anfitrión. Cada base usa su propio volumen. Docker no estaba instalado en el entorno de elaboración: la ejecución comprobada fue con los procesos Python locales; el arranque en contenedores queda pendiente de verificación.
+Los servicios internos no publican puertos al anfitrión. Cada base SQLite usa su propio volumen; las URL configuradas conectan Auth y Notificaciones con sus proyectos PostgreSQL respectivos. Docker no estaba instalado en el entorno de elaboración: la ejecución comprobada fue con los procesos Python locales; el arranque en contenedores queda pendiente de verificación.
 
 ## APIs
 
@@ -141,6 +145,8 @@ La descripción anterior no sustituye la documentación formal Swagger/OpenAPI p
 
 Se verifican los seis servicios, la migración de reservas confirmadas y canceladas, el aislamiento por usuario, el precio obtenido en Habitaciones, los cupos por tipo, la concurrencia, la liberación de inventario y los avisos asociados al correo de Auth. También se detiene y reinicia Inventario durante una reserva y durante una cancelación para comprobar su recuperación, y se reinicia Reservas para comprobar persistencia.
 
+`python tests/integration.py --postgres` ejecuta las mismas 57 comprobaciones con las dos conexiones Supabase de `.env`, cuatro SQLite temporales y SMTP desactivado. Limpia únicamente las cuentas y mensajes que crea para esa ejecución. `python tests/database_config.py` comprueba seis límites de configuración y `python tests/migration.py` tres casos de conservación de datos. Usa el Python de `.venv` para las pruebas de PostgreSQL. Consulta `SUPABASE.md` para los detalles.
+
 La selección de habitación en la web actualiza el resumen y el precio de práctica. Las cuentas y reservas existentes se conservaron al actualizar.
 
 ## Gmail y prueba de envío
@@ -166,6 +172,6 @@ Después de guardar el archivo:
 3. Revisa la bandeja de entrada y spam del destinatario. La aceptación SMTP no demuestra por sí sola que el mensaje llegó a esa bandeja.
 4. Reinicia Hotels para que los avisos de las nuevas reservas usen esa configuración.
 
-No se configuraron credenciales ni se envió correo real durante esta actualización. No hace falta que pegues la contraseña en el chat. Mantén `.env` únicamente en tu equipo.
+La prueba real con Gmail fue aceptada por el servidor SMTP el 17 de octubre de 2026. Mantén `.env` únicamente en tu equipo y configura tus propias credenciales al usar otra instalación. Las vistas previas guardadas antes de habilitar SMTP no se reenvían automáticamente.
 
 Consulta `FUENTES.md` para los hoteles y fotografías, y `PRUEBAS.md` para la verificación realizada.
