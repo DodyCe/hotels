@@ -1,0 +1,44 @@
+[
+  {
+    "id": "ghl-monteria-principal",
+    "hotelId": "ghl-monteria",
+    "name": "Business Superior",
+    "capacity": 4,
+    "price": 350000
+  },
+  {
+    "id": "ghl-monteria-alternativa",
+    "hotelId": "ghl-monteria",
+    "name": "Business Ejecutiva",
+    "capacity": 2,
+    "price": 300000
+  },
+  {
+    "id": "sites-monteria-principal",
+    "hotelId": "sites-monteria",
+    "name": "Site Loft Business",
+    "capacity": 2,
+    "price": 295000
+  },
+  {
+    "id": "sites-monteria-alternativa",
+    "hotelId": "sites-monteria",
+    "name": "Site Loft Doble",
+    "capacity": 4,
+    "price": 320000
+  },
+  {
+    "id": "florida-sinu-principal",
+    "hotelId": "florida-sinu",
+    "name": "Estándar Doble",
+    "capacity": 2,
+    "price": 260000
+  },
+  {
+    "id": "florida-sinu-alternativa",
+    "hotelId": "florida-sinu",
+    "name": "Triple",
+    "capacity": 3,
+    "price": 300000
+  }
+]

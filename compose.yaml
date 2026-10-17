@@ -1,0 +1,92 @@
+x-common: &common
+  build: .
+  restart: unless-stopped
+  environment: &environment
+    INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Configura una clave de 32 caracteres o más en .env}
+    HOTELS_DATA_DIR: /data
+    AUTH_URL: http://auth:8101
+    NOTIFICATIONS_URL: http://notifications:8102
+    RESERVATIONS_URL: http://reservations:8103
+    CATALOG_URL: http://catalog:8104
+    ROOMS_URL: http://rooms:8105
+    AVAILABILITY_URL: http://availability:8106
+    SERVICE_BIND: 0.0.0.0
+    COOKIE_SECURE: ${COOKIE_SECURE:-0}
+  healthcheck:
+    test: [CMD, python, -c, "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8080')+'/health',timeout=2)"]
+    interval: 10s
+    timeout: 3s
+    retries: 5
+
+services:
+  gateway:
+    <<: *common
+    command: [python, gateway.py]
+    environment:
+      <<: *environment
+      GATEWAY_BIND: 0.0.0.0
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://127.0.0.1:8080}
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      auth: {condition: service_healthy}
+      notifications: {condition: service_healthy}
+      reservations: {condition: service_healthy}
+      catalog: {condition: service_healthy}
+      rooms: {condition: service_healthy}
+      availability: {condition: service_healthy}
+  auth:
+    <<: *common
+    command: [python, services/auth.py]
+    environment:
+      <<: *environment
+      PORT: "8101"
+    volumes: ["auth-data:/data"]
+  notifications:
+    <<: *common
+    command: [python, services/notifications.py]
+    environment:
+      <<: *environment
+      PORT: "8102"
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    volumes: ["notification-data:/data"]
+  reservations:
+    <<: *common
+    command: [python, services/reservations.py]
+    environment:
+      <<: *environment
+      PORT: "8103"
+    volumes: ["reservation-data:/data"]
+  catalog:
+    <<: *common
+    command: [python, services/catalog.py]
+    environment:
+      <<: *environment
+      PORT: "8104"
+    volumes: ["catalog-data:/data"]
+  rooms:
+    <<: *common
+    command: [python, services/rooms.py]
+    environment:
+      <<: *environment
+      PORT: "8105"
+    volumes: ["room-data:/data"]
+  availability:
+    <<: *common
+    command: [python, services/availability.py]
+    environment:
+      <<: *environment
+      PORT: "8106"
+    volumes: ["inventory-data:/data"]
+
+volumes:
+  auth-data:
+  notification-data:
+  reservation-data:
+  catalog-data:
+  room-data:
+  inventory-data:

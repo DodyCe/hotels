@@ -1,0 +1,70 @@
+[
+  {
+    "id": "ghl-monteria",
+    "name": "GHL Hotel Montería",
+    "city": "Montería",
+    "area": "Sector Alamedas",
+    "address": "Calle 44 No. 8-43",
+    "description": "Hotel junto al centro comercial Alamedas. Su oferta incluye habitaciones Business y suites.",
+    "tags": [
+      "wifi",
+      "restaurant",
+      "work"
+    ],
+    "amenities": [
+      "Wi-Fi",
+      "Restaurante",
+      "Zona de trabajo"
+    ],
+    "image": "https://images.unsplash.com/photo-1611971263023-105938ce12ed?auto=format&fit=crop&w=1000&q=85",
+    "photographer": "visualsofdana",
+    "photoPage": "https://unsplash.com/photos/white-bed-with-blue-pillows-VoYzj_ITdog",
+    "source": "https://www.ghlhoteles.com/hoteles/colombia/monteria/ghl-monteria/",
+    "badge": "Alamedas"
+  },
+  {
+    "id": "sites-monteria",
+    "name": "Sites Montería",
+    "city": "Montería",
+    "area": "Avenida Circunvalar",
+    "address": "Carrera 6 No. 65-24",
+    "description": "Alojamiento con habitaciones tipo loft, espacios de trabajo y el restaurante Étnico.",
+    "tags": [
+      "wifi",
+      "restaurant",
+      "work"
+    ],
+    "amenities": [
+      "Wi-Fi",
+      "Restaurante",
+      "Zona de trabajo"
+    ],
+    "image": "https://images.unsplash.com/photo-1592229505678-cf99a9908e03?auto=format&fit=crop&w=1000&q=85",
+    "photographer": "reisetopia",
+    "photoPage": "https://unsplash.com/photos/white-and-brown-floral-bed-linen-oukA5uMuALg",
+    "source": "https://www.sitesmonteria.com/es/",
+    "badge": "Circunvalar"
+  },
+  {
+    "id": "florida-sinu",
+    "name": "Hotel Florida Sinú",
+    "city": "Montería",
+    "area": "Barrio El Mora",
+    "address": "Calle 41 No. 15D-26",
+    "description": "Hotel con habitaciones estándar, triples y suites. Las habitaciones cuentan con aire acondicionado y Wi-Fi.",
+    "tags": [
+      "wifi",
+      "work"
+    ],
+    "amenities": [
+      "Wi-Fi",
+      "Aire acondicionado",
+      "Escritorio"
+    ],
+    "image": "https://images.unsplash.com/photo-1623718649591-311775a30c43?auto=format&fit=crop&w=1000&q=85",
+    "photographer": "Cory Bjork",
+    "photoPage": "https://unsplash.com/photos/swimming-pool-near-palm-trees-during-daytime-D1yT791Nf9A",
+    "source": "https://hotelfloridasinu.com/habitaciones",
+    "badge": "El Mora"
+  }
+]
