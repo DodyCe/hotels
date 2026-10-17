@@ -36,10 +36,12 @@ def main():
     parser.add_argument('--open', action='store_true', help='Abre la web en el navegador')
     options = parser.parse_args()
     load_environment()
+    from services.postgres import validate_configuration
+    validate_configuration()
     processes = []
     try:
         for path, port in SERVICE_SPECS:
-            env = os.environ.copy()
+            env = service_environment(path)
             env['PYTHONUNBUFFERED'] = '1'
             if port:
                 env['PORT'] = str(port)
@@ -49,7 +51,7 @@ def main():
                 raise RuntimeError('Un servicio no pudo iniciar. Revisa los puertos 8080 y 8101–8106.')
             try:
                 for _,port in SERVICE_SPECS:
-                    urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=.4).close()
+                    urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=6 if port in (8101,8102) else .4).close()
                 break
             except (OSError, urllib.error.URLError):
                 time.sleep(.2)
@@ -61,7 +63,7 @@ def main():
             import json
             if json.load(response)['pending']:
                 raise RuntimeError('Hay reservas pendientes de migración. No se abre el Gateway para proteger sus cupos.')
-        processes.append(subprocess.Popen([sys.executable,str(ROOT/'gateway.py')],cwd=ROOT,env=os.environ.copy()))
+        processes.append(subprocess.Popen([sys.executable,str(ROOT/'gateway.py')],cwd=ROOT,env=service_environment('gateway.py')))
         url = f"http://127.0.0.1:{os.environ.get('GATEWAY_PORT','8080')}"
         for _ in range(30):
             if processes[-1].poll() is not None:
@@ -73,7 +75,7 @@ def main():
                 time.sleep(.2)
         else:
             raise RuntimeError('El Gateway no respondió a tiempo.')
-        print('\nHOTELS · práctica universitaria\n' + url + '\nCtrl+C para cerrar todos los servicios.\n', flush=True)
+        print('\nHOTELS · Sistema de reservas\n' + url + '\nCtrl+C para cerrar todos los servicios.\n', flush=True)
         if options.open:
             webbrowser.open(url)
         while all(p.poll() is None for p in processes):
@@ -89,6 +91,21 @@ def main():
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 process.kill()
+
+def service_environment(path):
+    """Cada proceso recibe únicamente su conexión de base y su configuración SMTP."""
+    env = os.environ.copy()
+    owned = {'services/auth.py': 'AUTH_DATABASE_URL',
+             'services/notifications.py': 'NOTIFICATIONS_DATABASE_URL'}.get(path)
+    for key in ('AUTH_DATABASE_URL', 'NOTIFICATIONS_DATABASE_URL'):
+        if key != owned:
+            env.pop(key, None)
+    if path != 'services/notifications.py':
+        for key in list(env):
+            if key.startswith('SMTP_'):
+                env.pop(key)
+    return env
+
 
 if __name__ == '__main__':
     main()

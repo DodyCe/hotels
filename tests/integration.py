@@ -14,6 +14,8 @@ PORTS = tuple(range(18101,18107))
 INTERNAL_KEY = ''
 CONTROLLER = None
 checks = []
+USE_POSTGRES = False
+FIXTURE_USERS = set()
 def client():
     return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 def request(opener, path, data=None, headers=None):
@@ -22,7 +24,10 @@ def request(opener, path, data=None, headers=None):
     try: response = opener.open(req, timeout=15)
     except urllib.error.HTTPError as error: response = error
     with response:
-        return response.code, json.load(response), response.headers
+        result = json.load(response)
+        if path == '/api/auth/register' and response.code == 201:
+            FIXTURE_USERS.add(result['user']['id'])
+        return response.code, result, response.headers
 def check(condition, label):
     assert condition, label
     checks.append(label)
@@ -79,8 +84,14 @@ def run_checks(data_dir):
     check(len({m['id'] for m in messages}) == 3,'Sin duplicados al repetir cancelación')
     check(all(m['status'] == 'vista_previa' for m in messages),'SMTP sin configurar: vista previa sin envío real')
     check(all('No constituye una reserva real' in m['body'] for m in messages),'Aviso académico en todos los correos')
-    with closing(sqlite3.connect(Path(data_dir) / 'auth.sqlite3')) as db:
-        saved = db.execute('SELECT salt,password_hash FROM users WHERE id=?',(uid,)).fetchone()
+    if USE_POSTGRES:
+        import postgres
+        with postgres.connect('auth') as db:
+            row = db.execute('SELECT salt,password_hash FROM users WHERE id=?',(uid,)).fetchone()
+            saved = (row['salt'],row['password_hash'])
+    else:
+        with closing(sqlite3.connect(Path(data_dir) / 'auth.sqlite3')) as db:
+            saved = db.execute('SELECT salt,password_hash FROM users WHERE id=?',(uid,)).fetchone()
     check(len(saved[0]) == 32 and len(saved[1]) == 64 and password not in saved,'Contraseña persistida con sal y scrypt')
     check(request(a,'/api/auth/logout',{})[0] == 200 and request(a,'/api/reservations')[0] == 401,'Cierre de sesión revoca acceso')
     advanced_checks(a,b,data_dir,password,email_a)
@@ -121,7 +132,13 @@ def advanced_checks(a,b,data_dir,password,email_a):
     check(internal(18105,'/health')[1]['service']=='habitaciones','Habitaciones tiene proceso y health propios')
     check(internal(18106,'/health')[1]['service']=='disponibilidad-inventario','Inventario tiene proceso y health propios')
     files={f.name for f in Path(data_dir).glob('*.sqlite3')}
-    check({'auth.sqlite3','notifications.sqlite3','reservations.sqlite3','catalog.sqlite3','rooms.sqlite3','availability.sqlite3'}<=files,'Seis bases de datos separadas')
+    if USE_POSTGRES:
+        check({'reservations.sqlite3','catalog.sqlite3','rooms.sqlite3','availability.sqlite3'}<=files
+              and not {'auth.sqlite3','notifications.sqlite3'} & files
+              and all(internal(port,'/health')[1].get('database')=='postgresql' for port in (18101,18102)),
+              'Dos servicios PostgreSQL y cuatro SQLite independientes; sin SQLite de respaldo para Auth o Notificaciones')
+    else:
+        check({'auth.sqlite3','notifications.sqlite3','reservations.sqlite3','catalog.sqlite3','rooms.sqlite3','availability.sqlite3'}<=files,'Seis bases de datos separadas')
     migrated_start=dt.date.today()+dt.timedelta(days=100)
     migrated_end=migrated_start+dt.timedelta(days=3)
     check(available(b,'ghl-monteria-principal',migrated_start,migrated_end)==0,'Reserva antigua confirmada bloquea el inventario migrado')
@@ -172,8 +189,18 @@ def advanced_checks(a,b,data_dir,password,email_a):
 
 
 def main():
-    global INTERNAL_KEY,CONTROLLER
+    global INTERNAL_KEY,CONTROLLER,USE_POSTGRES
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--postgres',action='store_true',help='Usa las dos conexiones de .env; crea y limpia solo sus propias cuentas de prueba.')
+    USE_POSTGRES=parser.parse_args().postgres
     root=Path(__file__).resolve().parents[1]
+    if USE_POSTGRES:
+        sys.path.insert(0,str(root)); sys.path.insert(0,str(root/'services'))
+        from start import load_environment
+        import postgres
+        load_environment()
+        postgres.validate_configuration(require_both=True)
     for port in (18080,*PORTS):
         with socket.socket() as probe:
             try: probe.bind(('127.0.0.1',port))
@@ -191,6 +218,8 @@ def main():
         env=os.environ.copy()
         INTERNAL_KEY=secrets.token_urlsafe(48)
         env.update(HOTELS_DATA_DIR=temp,INTERNAL_API_KEY=INTERNAL_KEY,
+            AUTH_DATABASE_URL=os.environ.get('AUTH_DATABASE_URL','') if USE_POSTGRES else '',
+            NOTIFICATIONS_DATABASE_URL=os.environ.get('NOTIFICATIONS_DATABASE_URL','') if USE_POSTGRES else '',
             SMTP_HOST='',SMTP_USER='',SMTP_PASSWORD='',SMTP_FROM='',
             GATEWAY_PORT='18080',PUBLIC_ORIGIN='http://127.0.0.1:18080',
             AUTH_URL='http://127.0.0.1:18101',NOTIFICATIONS_URL='http://127.0.0.1:18102',
@@ -207,10 +236,13 @@ def main():
                     try:p.wait(timeout=5)
                     except subprocess.TimeoutExpired:p.kill();p.wait()
                 else:
-                    processes[port]=subprocess.Popen([sys.executable,str(root/files[port])],cwd=root,env={**env,'PORT':str(port)},stdout=logs,stderr=logs)
+                    child_env={**env,'PORT':str(port)}
+                    if port!=18101: child_env.pop('AUTH_DATABASE_URL',None)
+                    if port!=18102: child_env.pop('NOTIFICATIONS_DATABASE_URL',None)
+                    processes[port]=subprocess.Popen([sys.executable,str(root/files[port])],cwd=root,env=child_env,stdout=logs,stderr=logs)
                     def ready():
                         try:
-                            urllib.request.urlopen(f'http://127.0.0.1:{port}/health',timeout=.3).close();return True
+                            urllib.request.urlopen(f'http://127.0.0.1:{port}/health',timeout=6 if USE_POSTGRES and port in (18101,18102) else .3).close();return True
                         except OSError:return False
                     if not poll(ready,timeout=15):raise RuntimeError('No inició el servicio de pruebas '+str(port))
             CONTROLLER=control
@@ -221,5 +253,15 @@ def main():
                 logs.flush();logs.seek(0);print(logs.read()[-6000:]);raise
             finally:
                 for port in processes:control('stop',port)
+                if USE_POSTGRES:
+                    # Ninguna consulta de limpieza usa correos o IDs ajenos a esta ejecución.
+                    with postgres.connect('notifications') as db:
+                        for uid in FIXTURE_USERS:
+                            db.execute('DELETE FROM messages WHERE user_id=?',(uid,))
+                    with postgres.connect('auth') as db:
+                        for uid in FIXTURE_USERS:
+                            db.execute('DELETE FROM outbox WHERE id=?',('welcome:'+uid,))
+                            db.execute('DELETE FROM sessions WHERE user_id=?',(uid,))
+                            db.execute('DELETE FROM users WHERE id=?',(uid,))
 
 if __name__=='__main__':main()

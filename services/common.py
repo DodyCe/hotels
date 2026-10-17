@@ -14,6 +14,9 @@ from contextlib import contextmanager
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import postgres
+
+INTEGRITY_ERRORS = postgres.INTEGRITY_ERRORS
 
 KEY = os.environ.get('INTERNAL_API_KEY', '')
 if len(KEY) < 32:
@@ -44,6 +47,10 @@ def validate_dates(arrival, departure, allow_past=False):
 
 @contextmanager
 def connect(name):
+    if postgres.database_url(name):
+        with postgres.connect(name) as db:
+            yield db
+        return
     db = sqlite3.connect(DATA / (name + '.sqlite3'), timeout=15)
     try:
         db.row_factory = sqlite3.Row
@@ -87,7 +94,7 @@ def session_hash(handler):
         return ''
 
 def init_outbox(db):
-    db.execute('CREATE TABLE IF NOT EXISTS outbox (id TEXT PRIMARY KEY, body TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_try REAL NOT NULL DEFAULT 0, delivered INTEGER NOT NULL DEFAULT 0)')
+    db.execute('CREATE TABLE IF NOT EXISTS outbox (id TEXT PRIMARY KEY, body TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_try DOUBLE PRECISION NOT NULL DEFAULT 0, delivered INTEGER NOT NULL DEFAULT 0)')
 
 def enqueue(db, event):
     db.execute('INSERT INTO outbox(id, body) VALUES (?, ?)', (event['id'], json.dumps(event)))
@@ -97,7 +104,7 @@ def start_outbox(name):
         while True:
             try:
                 with connect(name) as db:
-                    rows = db.execute('SELECT * FROM outbox WHERE delivered=0 AND next_try<=? ORDER BY rowid LIMIT 10', (time.time(),)).fetchall()
+                    rows = db.execute('SELECT * FROM outbox WHERE delivered=0 AND next_try<=? ORDER BY next_try,id LIMIT 10', (time.time(),)).fetchall()
                 for row in rows:
                     try:
                         internal_request(NOTIFICATIONS, '/internal/events', json.loads(row['body']))
@@ -114,6 +121,15 @@ def start_outbox(name):
 class Handler(BaseHTTPRequestHandler):
     server_version = 'Hotels/1.0'
     def health(self):
+        name = getattr(self, 'database_name', None)
+        if name:
+            try:
+                with connect(name) as db:
+                    db.execute('SELECT 1').fetchone()
+            except Exception:
+                return self.respond(503, {'status': 'unavailable', 'service': self.service_name})
+            return self.respond(200, {'status': 'ok', 'service': self.service_name,
+                                     'database': 'postgresql' if postgres.database_url(name) else 'sqlite'})
         return self.respond(200, {'status': 'ok', 'service': self.service_name})
     def log_message(self, fmt, *args):
         # No registrar cuerpos, cookies, contraseñas o direcciones de correo.

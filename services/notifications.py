@@ -6,14 +6,18 @@ import smtplib
 import ssl
 import threading
 import time
+import postgres
 from email.message import EmailMessage
 from common import APIError, AUTH, Handler, connect, internal_request, serve, user_for
 
 with connect('notifications') as db:
-    db.execute('''CREATE TABLE IF NOT EXISTS messages (
-        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, recipient TEXT NOT NULL,
-        subject TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL,
-        created REAL NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_try REAL NOT NULL DEFAULT 0)''')
+    if postgres.database_url('notifications'):
+        postgres.initialize('notifications', db)
+    else:
+        db.execute('''CREATE TABLE IF NOT EXISTS messages (
+            id TEXT PRIMARY KEY, user_id TEXT NOT NULL, recipient TEXT NOT NULL,
+            subject TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL,
+            created DOUBLE PRECISION NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_try DOUBLE PRECISION NOT NULL DEFAULT 0)''')
 
 def smtp_ready():
     return all(os.environ.get(key, '').strip() for key in ('SMTP_HOST','SMTP_USER','SMTP_PASSWORD','SMTP_FROM'))
@@ -21,24 +25,25 @@ def smtp_ready():
 def compose(kind, payload, user):
     greeting = 'Hola, ' + user['name'] + '.\n\n'
     if kind == 'welcome':
-        subject = 'Bienvenido a Hotels — práctica universitaria'
-        content = 'Tu cuenta de práctica fue creada. Ya puedes consultar, registrar y cancelar reservas simuladas.'
+        subject = 'Bienvenido a Hotels'
+        content = 'Tu cuenta fue creada. Ya puedes consultar, registrar y cancelar tus reservas.'
     elif kind in ('reservation.confirmed', 'reservation.cancelled'):
         cancelled = kind.endswith('cancelled')
-        subject = ('Cancelación' if cancelled else 'Confirmación') + ' de reserva de práctica ' + str(payload.get('id', ''))
-        content = (f"Reserva: {payload.get('id', '')}\nHotel de referencia: {payload.get('hotel', '')}\n"
+        subject = ('Cancelación' if cancelled else 'Confirmación') + ' de reserva ' + str(payload.get('id', ''))
+        content = (f"Reserva: {payload.get('id', '')}\nHotel: {payload.get('hotel', '')}\n"
                    f"Habitación: {payload.get('room', '')}\nLlegada: {payload.get('checkin', '')}\nSalida: {payload.get('checkout', '')}\n"
-                   f"Huéspedes: {payload.get('guests', '')}\nTotal simulado: {payload.get('total', '')} COP\n"
-                   f"Estado: {'Cancelada' if cancelled else 'Confirmada en el entorno de práctica'}")
+                   f"Huéspedes: {payload.get('guests', '')}\nTotal: {payload.get('total', '')} COP\n"
+                   f"Estado: {'Cancelada' if cancelled else 'Confirmada'}")
     else:
         raise APIError(400, 'Tipo de notificación no permitido.')
-    footer = ('\n\nHOTELS · PROYECTO UNIVERSITARIO\nEste mensaje corresponde a una simulación académica. '
+    footer = ('\n\nHOTELS · GESTIÓN DE RESERVAS\nHotels es un proyecto académico independiente. '
               'No constituye una reserva real, un cobro ni un comprobante del hotel. '
               'Hotels no representa ni tiene afiliación con los establecimientos mencionados.\n')
     return subject, greeting + content + footer
 
 class Notifications(Handler):
     service_name = 'notificaciones'
+    database_name = 'notifications'
     def route(self):
         if self.command == 'GET' and self.path == '/notifications':
             user = user_for(self)
@@ -58,7 +63,7 @@ class Notifications(Handler):
             subject, content = compose(event.get('kind'), event['payload'], user)
             status = 'pendiente' if smtp_ready() else 'vista_previa'
             with connect('notifications') as db:
-                db.execute('INSERT OR IGNORE INTO messages(id,user_id,recipient,subject,body,status,created) VALUES (?,?,?,?,?,?,?)', (event['id'], user['id'], user['email'], subject, content, status, time.time()))
+                db.execute('INSERT INTO messages(id,user_id,recipient,subject,body,status,created) VALUES (?,?,?,?,?,?,?) ON CONFLICT (id) DO NOTHING', (event['id'], user['id'], user['email'], subject, content, status, time.time()))
             return self.respond(202, {'accepted': True})
         raise APIError(404, 'Ruta no encontrada.')
 

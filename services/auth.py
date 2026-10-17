@@ -4,18 +4,21 @@ import hmac
 import os
 import re
 import secrets
-import sqlite3
 import threading
 import time
 import uuid
-from common import APIError, Handler, SESSION_SECONDS, connect, enqueue, init_outbox, serve, session_hash, start_outbox
+import postgres
+from common import APIError, Handler, INTEGRITY_ERRORS, SESSION_SECONDS, connect, enqueue, init_outbox, serve, session_hash, start_outbox
 
 with connect('auth') as db:
-    db.executescript('''
-    CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, salt TEXT NOT NULL, password_hash TEXT NOT NULL, created REAL NOT NULL);
-    CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires REAL NOT NULL);
-    ''')
-    init_outbox(db)
+    if postgres.database_url('auth'):
+        postgres.initialize('auth', db)
+    else:
+        db.executescript('''
+        CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, salt TEXT NOT NULL, password_hash TEXT NOT NULL, created DOUBLE PRECISION NOT NULL);
+        CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires DOUBLE PRECISION NOT NULL);
+        ''')
+        init_outbox(db)
 
 attempts, attempts_lock = {}, threading.Lock()
 
@@ -38,6 +41,7 @@ def session_cookie(token, max_age=SESSION_SECONDS):
 
 class Auth(Handler):
     service_name = 'autenticacion'
+    database_name = 'auth'
     def route(self):
         if self.command == 'GET' and self.path == '/auth/me':
             return self.respond(200, {'user': current_user(self)})
@@ -87,7 +91,7 @@ class Auth(Handler):
                 derived = password_hash(password, salt)
                 try:
                     db.execute('INSERT INTO users VALUES (?,?,?,?,?,?)', (uid, name.strip(), email, salt, derived, time.time()))
-                except sqlite3.IntegrityError:
+                except INTEGRITY_ERRORS:
                     raise APIError(409, 'No se puede registrar esta cuenta. Intenta iniciar sesión.') from None
                 row = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
                 enqueue(db, {'id': 'welcome:' + uid, 'userId': uid, 'kind': 'welcome', 'payload': {}})
