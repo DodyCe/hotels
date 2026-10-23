@@ -11,8 +11,11 @@ except ImportError:
     psycopg = None
 
 INTEGRITY_ERRORS = (sqlite3.IntegrityError,) + ((psycopg.IntegrityError,) if psycopg else ())
-SETTINGS = {'auth': 'AUTH_DATABASE_URL', 'notifications': 'NOTIFICATIONS_DATABASE_URL'}
-SCHEMAS = {'auth': 'hotels_auth', 'notifications': 'hotels_notifications'}
+SETTINGS = {'auth': 'AUTH_DATABASE_URL', 'notifications': 'NOTIFICATIONS_DATABASE_URL',
+            'catalog': 'CATALOG_DATABASE_URL', 'rooms': 'ROOMS_DATABASE_URL'}
+SCHEMAS = {name: 'hotels_' + name for name in SETTINGS}
+TABLES = {'auth': ('users', 'sessions', 'outbox'), 'notifications': ('messages',),
+          'catalog': ('hotels',), 'rooms': ('rooms',)}
 
 
 def database_url(name):
@@ -36,13 +39,15 @@ def connection_identity(value):
         raise ValueError('La conexión debe ser una URL PostgreSQL válida; revisa el archivo .env.') from None
 
 
-def validate_configuration(require_both=False):
-    auth, notifications = (database_url(name) for name in SETTINGS)
-    if require_both and not (auth and notifications):
-        raise ValueError('Completa AUTH_DATABASE_URL y NOTIFICATIONS_DATABASE_URL en .env con dos proyectos distintos.')
-    identities = [connection_identity(value) for value in (auth, notifications) if value]
-    if len(identities) == 2 and identities[0] == identities[1]:
-        raise ValueError('Autenticación y Notificaciones requieren bases distintas, no dos esquemas del mismo proyecto.')
+def validate_configuration(require_both=False, require_services=()):
+    required = set(require_services) | ({'auth', 'notifications'} if require_both else set())
+    if not required <= SETTINGS.keys():
+        raise ValueError('Microservicio PostgreSQL desconocido.')
+    if any(not database_url(name) for name in required):
+        raise ValueError('Completa las conexiones PostgreSQL requeridas en .env con proyectos distintos.')
+    identities = [connection_identity(database_url(name)) for name in SETTINGS if database_url(name)]
+    if len(identities) != len(set(identities)):
+        raise ValueError('Los microservicios requieren bases distintas, no varios esquemas del mismo proyecto.')
 
 
 class Database:
@@ -50,7 +55,7 @@ class Database:
         self.connection = connection
 
     def execute(self, sql, parameters=()):
-        # Solo SQL estático de estos dos servicios utiliza este adaptador.
+        # Solo SQL estático de los servicios configurados utiliza este adaptador.
         # Los valores siguen separados y enlazados por el driver.
         # Evita que extra_float_digits=0 redondee fechas Unix al leerlas como texto.
         return self.connection.execute(sql.replace('?', '%s'), parameters, binary=True)
@@ -89,6 +94,5 @@ def initialize(name, db):
     owner = db.execute('SELECT service FROM hotels_meta.service_owner WHERE id=1').fetchone()
     if not owner or owner['service'] != name:
         raise ValueError('Esta base ya pertenece a otro microservicio. Selecciona otro proyecto de Supabase.')
-    tables = ('users', 'sessions', 'outbox') if name == 'auth' else ('messages',)
-    for table in tables:
+    for table in TABLES[name]:
         db.execute('SELECT 1 FROM ' + table + ' LIMIT 1')

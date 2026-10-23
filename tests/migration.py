@@ -27,6 +27,34 @@ def user(identifier='fixture'):
 
 
 class Migration(unittest.TestCase):
+    def test_catalog_and_rooms_keep_original_order_without_changing_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, table, column in [('catalog','hotels','document'),('rooms','rooms','name')]:
+                with closing(sqlite3.connect(root/(name+'.sqlite3'))) as db:
+                    db.execute(f'CREATE TABLE {table}(id TEXT PRIMARY KEY,{column} TEXT)')
+                    db.executemany(f'INSERT INTO {table} VALUES (?,?)',[('z-first','first'),('a-second','second')])
+                    db.commit()
+            snapshot = snapshot_sources(root,backup=True,services=['catalog','rooms'])
+            self.assertEqual(list(snapshot),['catalog','rooms'])
+            for name,table in [('catalog','hotels'),('rooms','rooms')]:
+                self.assertEqual([(row['id'],row['sort_order']) for row in snapshot[name][table]], [('z-first',0),('a-second',1)])
+                with closing(sqlite3.connect(root/(name+'.sqlite3'))) as db:
+                    self.assertNotIn('sort_order',[column[1] for column in db.execute(f'PRAGMA table_info({table})')])
+
+    def test_room_migration_preserves_camelcase_price_and_rejects_changes(self):
+        source = {'rooms':[dict(id='room-a',hotelId='hotel-a',name='Doble',capacity=2,price=300000,sort_order=0)]}
+        with closing(sqlite3.connect(':memory:')) as db:
+            db.row_factory=sqlite3.Row
+            db.execute('CREATE TABLE rooms(id TEXT PRIMARY KEY,"hotelId" TEXT,name TEXT,capacity INTEGER,price INTEGER,sort_order INTEGER)')
+            with db: inspect_rows('rooms',source,db,apply=True)
+            self.assertEqual(dict(db.execute('SELECT * FROM rooms').fetchone()),source['rooms'][0])
+            with db: self.assertEqual(inspect_rows('rooms',source,db,apply=True)['rooms']['copiados'],0)
+            conflict={'rooms':[{**source['rooms'][0],'price':1}]}
+            with self.assertRaises(ValueError):
+                with db: inspect_rows('rooms',conflict,db,apply=True)
+            self.assertEqual(db.execute('SELECT price FROM rooms').fetchone()[0],300000)
+
     def test_backup_preserves_source_and_skips_expired_sessions(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

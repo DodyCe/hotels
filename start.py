@@ -51,7 +51,7 @@ def main():
                 raise RuntimeError('Un servicio no pudo iniciar. Revisa los puertos 8080 y 8101–8106.')
             try:
                 for _,port in SERVICE_SPECS:
-                    urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=6 if port in (8101,8102) else .4).close()
+                    urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=6 if port in (8101,8102,8104,8105) else .4).close()
                 break
             except (OSError, urllib.error.URLError):
                 time.sleep(.2)
@@ -96,8 +96,10 @@ def service_environment(path):
     """Cada proceso recibe únicamente su conexión de base y su configuración SMTP."""
     env = os.environ.copy()
     owned = {'services/auth.py': 'AUTH_DATABASE_URL',
-             'services/notifications.py': 'NOTIFICATIONS_DATABASE_URL'}.get(path)
-    for key in ('AUTH_DATABASE_URL', 'NOTIFICATIONS_DATABASE_URL'):
+             'services/notifications.py': 'NOTIFICATIONS_DATABASE_URL',
+             'services/catalog.py': 'CATALOG_DATABASE_URL',
+             'services/rooms.py': 'ROOMS_DATABASE_URL'}.get(path)
+    for key in ('AUTH_DATABASE_URL', 'NOTIFICATIONS_DATABASE_URL', 'CATALOG_DATABASE_URL', 'ROOMS_DATABASE_URL'):
         if key != owned:
             env.pop(key, None)
     if path != 'services/notifications.py':

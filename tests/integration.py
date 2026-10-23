@@ -15,6 +15,7 @@ INTERNAL_KEY = ''
 CONTROLLER = None
 checks = []
 USE_POSTGRES = False
+POSTGRES_SERVICES = set()
 FIXTURE_USERS = set()
 def client():
     return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
@@ -133,10 +134,12 @@ def advanced_checks(a,b,data_dir,password,email_a):
     check(internal(18106,'/health')[1]['service']=='disponibilidad-inventario','Inventario tiene proceso y health propios')
     files={f.name for f in Path(data_dir).glob('*.sqlite3')}
     if USE_POSTGRES:
-        check({'reservations.sqlite3','catalog.sqlite3','rooms.sqlite3','availability.sqlite3'}<=files
-              and not {'auth.sqlite3','notifications.sqlite3'} & files
-              and all(internal(port,'/health')[1].get('database')=='postgresql' for port in (18101,18102)),
-              'Dos servicios PostgreSQL y cuatro SQLite independientes; sin SQLite de respaldo para Auth o Notificaciones')
+        service_ports = {'auth':18101, 'notifications':18102, 'catalog':18104, 'rooms':18105}
+        sqlite_services = {'auth','notifications','catalog','rooms','reservations','availability'} - POSTGRES_SERVICES
+        check({name+'.sqlite3' for name in sqlite_services} <= files
+              and not {name+'.sqlite3' for name in POSTGRES_SERVICES} & files
+              and all(internal(service_ports[name],'/health')[1].get('database')=='postgresql' for name in POSTGRES_SERVICES),
+              f'{len(POSTGRES_SERVICES)} PostgreSQL y {len(sqlite_services)} SQLite independientes, sin respaldo silencioso')
     else:
         check({'auth.sqlite3','notifications.sqlite3','reservations.sqlite3','catalog.sqlite3','rooms.sqlite3','availability.sqlite3'}<=files,'Seis bases de datos separadas')
     migrated_start=dt.date.today()+dt.timedelta(days=100)
@@ -189,18 +192,21 @@ def advanced_checks(a,b,data_dir,password,email_a):
 
 
 def main():
-    global INTERNAL_KEY,CONTROLLER,USE_POSTGRES
+    global INTERNAL_KEY,CONTROLLER,USE_POSTGRES,POSTGRES_SERVICES
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--postgres',action='store_true',help='Usa las dos conexiones de .env; crea y limpia solo sus propias cuentas de prueba.')
-    USE_POSTGRES=parser.parse_args().postgres
+    parser.add_argument('--postgres',action='store_true',help='Usa las conexiones PostgreSQL de .env; limpia solo sus propias cuentas de prueba.')
+    parser.add_argument('--four-postgres',action='store_true',help='Exige Auth, Notificaciones, Catálogo y Habitaciones en PostgreSQL.')
+    options = parser.parse_args()
+    USE_POSTGRES=options.postgres or options.four_postgres
     root=Path(__file__).resolve().parents[1]
     if USE_POSTGRES:
         sys.path.insert(0,str(root)); sys.path.insert(0,str(root/'services'))
         from start import load_environment
         import postgres
         load_environment()
-        postgres.validate_configuration(require_both=True)
+        postgres.validate_configuration(require_both=True, require_services=tuple(postgres.SETTINGS) if options.four_postgres else ())
+        POSTGRES_SERVICES = {name for name in postgres.SETTINGS if postgres.database_url(name)}
     for port in (18080,*PORTS):
         with socket.socket() as probe:
             try: probe.bind(('127.0.0.1',port))
@@ -220,6 +226,8 @@ def main():
         env.update(HOTELS_DATA_DIR=temp,INTERNAL_API_KEY=INTERNAL_KEY,
             AUTH_DATABASE_URL=os.environ.get('AUTH_DATABASE_URL','') if USE_POSTGRES else '',
             NOTIFICATIONS_DATABASE_URL=os.environ.get('NOTIFICATIONS_DATABASE_URL','') if USE_POSTGRES else '',
+            CATALOG_DATABASE_URL=os.environ.get('CATALOG_DATABASE_URL','') if USE_POSTGRES else '',
+            ROOMS_DATABASE_URL=os.environ.get('ROOMS_DATABASE_URL','') if USE_POSTGRES else '',
             SMTP_HOST='',SMTP_USER='',SMTP_PASSWORD='',SMTP_FROM='',
             GATEWAY_PORT='18080',PUBLIC_ORIGIN='http://127.0.0.1:18080',
             AUTH_URL='http://127.0.0.1:18101',NOTIFICATIONS_URL='http://127.0.0.1:18102',
@@ -237,12 +245,13 @@ def main():
                     except subprocess.TimeoutExpired:p.kill();p.wait()
                 else:
                     child_env={**env,'PORT':str(port)}
-                    if port!=18101: child_env.pop('AUTH_DATABASE_URL',None)
-                    if port!=18102: child_env.pop('NOTIFICATIONS_DATABASE_URL',None)
+                    owner_keys = {18101:'AUTH_DATABASE_URL',18102:'NOTIFICATIONS_DATABASE_URL',18104:'CATALOG_DATABASE_URL',18105:'ROOMS_DATABASE_URL'}
+                    for key in ('AUTH_DATABASE_URL','NOTIFICATIONS_DATABASE_URL','CATALOG_DATABASE_URL','ROOMS_DATABASE_URL'):
+                        if key != owner_keys.get(port): child_env.pop(key,None)
                     processes[port]=subprocess.Popen([sys.executable,str(root/files[port])],cwd=root,env=child_env,stdout=logs,stderr=logs)
                     def ready():
                         try:
-                            urllib.request.urlopen(f'http://127.0.0.1:{port}/health',timeout=6 if USE_POSTGRES and port in (18101,18102) else .3).close();return True
+                            urllib.request.urlopen(f'http://127.0.0.1:{port}/health',timeout=6 if USE_POSTGRES and port in (18101,18102,18104,18105) else .3).close();return True
                         except OSError:return False
                     if not poll(ready,timeout=15):raise RuntimeError('No inició el servicio de pruebas '+str(port))
             CONTROLLER=control

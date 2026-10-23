@@ -69,6 +69,7 @@ services:
     environment:
       <<: *environment
       PORT: "8104"
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL:-}
     volumes: ["catalog-data:/data"]
   rooms:
     <<: *common
@@ -76,6 +77,7 @@ services:
     environment:
       <<: *environment
       PORT: "8105"
+      ROOMS_DATABASE_URL: ${ROOMS_DATABASE_URL:-}
     volumes: ["room-data:/data"]
   availability:
     <<: *common

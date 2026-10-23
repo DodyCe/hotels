@@ -1,16 +1,21 @@
-"""Habitaciones: tipos, pertenencia a hotel, capacidad y tarifa de práctica."""
+"""Habitaciones: tipos, pertenencia a hotel, capacidad y tarifa de referencia."""
 import json
+import postgres
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from common import APIError, Handler, connect, serve
 
 seed = json.loads((Path(__file__).resolve().parents[1] / 'seed' / 'rooms.json').read_text(encoding='utf-8'))
 with connect('rooms') as db:
-    db.execute('CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, hotelId TEXT NOT NULL, name TEXT NOT NULL, capacity INTEGER NOT NULL, price INTEGER NOT NULL)')
-    db.executemany('INSERT OR IGNORE INTO rooms VALUES (:id,:hotelId,:name,:capacity,:price)', seed)
+    if postgres.database_url('rooms'):
+        postgres.initialize('rooms', db)
+    else:
+        db.execute('CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, hotelId TEXT NOT NULL, name TEXT NOT NULL, capacity INTEGER NOT NULL, price INTEGER NOT NULL)')
+        db.executemany('INSERT OR IGNORE INTO rooms VALUES (:id,:hotelId,:name,:capacity,:price)', seed)
 
 class Rooms(Handler):
     service_name = 'habitaciones'
+    database_name = 'rooms'
     def route(self):
         url = urlsplit(self.path)
         if self.command != 'GET':
@@ -25,10 +30,11 @@ class Rooms(Handler):
                         raise ValueError()
                 except ValueError:
                     raise APIError(400, 'Número de huéspedes inválido.') from None
-                rows = db.execute('SELECT * FROM rooms WHERE (?=\'\' OR hotelId=?) AND capacity>=? ORDER BY rowid', (hotel_id, hotel_id, guests)).fetchall()
+                ordering = 'sort_order,id' if postgres.database_url('rooms') else 'rowid'
+                rows = db.execute('SELECT id,"hotelId",name,capacity,price FROM rooms WHERE (CAST(? AS TEXT)=\'\' OR "hotelId"=?) AND capacity>=? ORDER BY ' + ordering, (hotel_id, hotel_id, guests)).fetchall()
                 return self.respond(200, {'rooms': [dict(r) for r in rows]})
             if url.path.startswith('/rooms/'):
-                row = db.execute('SELECT * FROM rooms WHERE id=?', (url.path.removeprefix('/rooms/'),)).fetchone()
+                row = db.execute('SELECT id,"hotelId",name,capacity,price FROM rooms WHERE id=?', (url.path.removeprefix('/rooms/'),)).fetchone()
                 if row:
                     return self.respond(200, {'room': dict(row)})
         raise APIError(404, 'Habitación no encontrada.')
