@@ -103,6 +103,7 @@ select('#admin-records').addEventListener('click',event=>{
 });
 (async()=>{
   try {
+    if (!await window.waitForHotelsServices(showStatus)) return;
     const {user}=await request('/auth/me');
     if(user.role!=='admin')throw new Error('Esta sección requiere una cuenta administradora. Regresa a Hotels para gestionar tus reservas.');
     select('#admin-user').textContent=user.name;

@@ -295,8 +295,8 @@ async function showNotifications() {
   openModal('<h2>Notificaciones</h2><p>Consultando el correo de tu cuenta…</p>');
   try {
     const data = await api('/notifications');
-    const status = {vista_previa:'Disponible en Hotels',pendiente:'En cola',reintentando:'Reintentando entrega',error:'No se pudo entregar',aceptado_smtp:'Aceptado por el proveedor de correo'};
-    const tone = {error: 'is-error', aceptado_smtp: 'is-ok'};
+    const status = {vista_previa:'Disponible en Hotels',pendiente:'En cola',reintentando:'Reintentando entrega',error:'No se pudo entregar',aceptado_smtp:'Aceptado por el proveedor de correo',aceptado_api:'Aceptado por el proveedor de correo'};
+    const tone = {error: 'is-error', aceptado_smtp: 'is-ok',aceptado_api:'is-ok'};
     openModal(`<p class="eyebrow">EL CORREO DE TUS RESERVAS</p><h2>Notificaciones</h2><p>${data.smtpConfigured ? 'Consulta los avisos enviados a tu correo. Si no ves un mensaje, revisa también la carpeta de spam. La aceptación del proveedor no confirma la entrega en tu bandeja.' : 'El envío por correo no está disponible en este momento. Puedes consultar tus avisos aquí.'}</p><button class="button secondary" id="refresh-notifications">Actualizar mensajes</button>${data.notifications.length ? data.notifications.map((n) => `<article class="notification-item mail-card"><header><div><h3>${escapeHTML(n.subject)}</h3><p class="mail-meta">Para: ${escapeHTML(n.recipient)} · ${sentText(n.created)}</p></div><span class="mail-status ${tone[n.status] || ''}">${status[n.status] || 'En proceso'}</span></header><div class="mail-body">${mailBody(n.body)}</div></article>`).join('') : '<div class="reservation-item"><p>Los mensajes nuevos pueden tardar unos segundos en aparecer. Pulsa «Actualizar mensajes» para consultarlos.</p></div>'}`);
     $('#refresh-notifications').addEventListener('click', showNotifications);
   } catch (error) { openModal(`<h2>Notificaciones</h2><p>${escapeHTML(error.message)}</p>`); }
@@ -332,6 +332,7 @@ $('#notifications-button').addEventListener('click', showNotifications);
 $('#login-button').addEventListener('click', showAccount);
 render(); renderAccount();
 (async () => {
+  if (!await window.waitForHotelsServices(message => { $('#connection-note').textContent = message; })) return;
   try { await refreshAvailability(); } catch { $('#connection-note').textContent = 'No pudimos actualizar la disponibilidad. Los datos visibles son una vista previa; vuelve a intentarlo antes de reservar.'; }
   try { const data = await api('/auth/me'); state.user = data.user; renderAccount(); } catch { /* Visitante sin sesión. */ }
 })();

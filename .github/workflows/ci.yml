@@ -42,6 +42,7 @@ jobs:
       - run: python tests/migration.py
       - run: python tests/openapi.py
       - run: python tests/security_email.py
+      - run: python tests/cloud_deployment.py
 
   web:
     name: Frontend (ESLint y sintaxis)
@@ -55,6 +56,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: node --check web/app.js && node --check web/catalog.js
+      - run: node tests/frontend_build.mjs
 
   docker:
     name: Docker Compose (siete contenedores y flujo completo)

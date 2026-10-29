@@ -1,4 +1,4 @@
-"""Notificaciones: resuelve destinatarios en Auth y entrega por SMTP configurable."""
+"""Notificaciones: resuelve destinatarios en Auth y entrega por SMTP o Gmail HTTPS."""
 import hashlib
 import logging
 import os
@@ -7,6 +7,7 @@ import ssl
 import threading
 import time
 import postgres
+import gmail_transport
 import re
 from account_security import RESET_SECONDS, recovery_origin
 from email.message import EmailMessage
@@ -22,6 +23,10 @@ with connect('notifications') as db:
             created DOUBLE PRECISION NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_try DOUBLE PRECISION NOT NULL DEFAULT 0)''')
 
 def smtp_ready():
+    if os.environ.get('MAIL_PROVIDER','smtp') == 'gmail_api':
+        return gmail_transport.ready()
+    if os.environ.get('MAIL_PROVIDER','smtp') != 'smtp':
+        raise ValueError('MAIL_PROVIDER debe ser smtp o gmail_api.')
     return all(os.environ.get(key, '').strip() for key in ('SMTP_HOST','SMTP_USER','SMTP_PASSWORD','SMTP_FROM'))
 
 def compose(kind, payload, user):
@@ -116,29 +121,33 @@ def smtp_worker():
                     message['From'], message['To'], message['Subject'] = sender, row['recipient'], row['subject']
                     message['Message-ID'] = '<' + hashlib.sha256(row['id'].encode()).hexdigest() + '@hotels.local>'
                     message.set_content(row['body'])
-                    mode = os.environ.get('SMTP_SECURITY', 'starttls').lower()
-                    if mode not in ('ssl', 'starttls'):
-                        raise ValueError('SMTP_SECURITY debe ser ssl o starttls')
-                    context = ssl.create_default_context()
-                    port = int(os.environ.get('SMTP_PORT', '465' if mode == 'ssl' else '587'))
-                    client = smtplib.SMTP_SSL(host, port, timeout=12, context=context) if mode == 'ssl' else smtplib.SMTP(host, port, timeout=12)
-                    with client:
-                        if mode == 'starttls':
-                            client.ehlo(); client.starttls(context=context); client.ehlo()
-                        if os.environ.get('SMTP_USER'):
-                            client.login(os.environ['SMTP_USER'], os.environ.get('SMTP_PASSWORD', ''))
-                        client.send_message(message)
+                    if os.environ.get('MAIL_PROVIDER','smtp') == 'gmail_api':
+                        gmail_transport.send(message)
+                    else:
+                        mode = os.environ.get('SMTP_SECURITY', 'starttls').lower()
+                        if mode not in ('ssl', 'starttls'):
+                            raise ValueError('SMTP_SECURITY debe ser ssl o starttls')
+                        context = ssl.create_default_context()
+                        port = int(os.environ.get('SMTP_PORT', '465' if mode == 'ssl' else '587'))
+                        client = smtplib.SMTP_SSL(host, port, timeout=12, context=context) if mode == 'ssl' else smtplib.SMTP(host, port, timeout=12)
+                        with client:
+                            if mode == 'starttls':
+                                client.ehlo(); client.starttls(context=context); client.ehlo()
+                            if os.environ.get('SMTP_USER'):
+                                client.login(os.environ['SMTP_USER'], os.environ.get('SMTP_PASSWORD', ''))
+                            client.send_message(message)
                     with connect('notifications') as db:
-                        db.execute("UPDATE messages SET status='aceptado_smtp',attempts=attempts+1 WHERE id=?", (row['id'],))
+                        accepted='aceptado_api' if os.environ.get('MAIL_PROVIDER','smtp')=='gmail_api' else 'aceptado_smtp'
+                        db.execute('UPDATE messages SET status=?,attempts=attempts+1 WHERE id=?', (accepted,row['id']))
                         if private_reset:
                             db.execute("UPDATE messages SET body='Se envió un enlace de recuperación por correo.' WHERE id=?", (row['id'],))
                 except Exception:
-                    # SMTP aceptado no prueba entrega a la bandeja de entrada.
+                    # La aceptación del proveedor no prueba entrega en bandeja.
                     with connect('notifications') as db:
                         db.execute('UPDATE messages SET status=?,attempts=attempts+1,next_try=? WHERE id=?', ('error' if row['attempts'] >= 4 else 'reintentando', time.time()+min(300, 15*(2**row['attempts'])), row['id']))
-                    logging.warning('Entrega SMTP fallida; revisar configuración del proveedor (evento %s)', row['id'])
+                    logging.warning('Entrega de correo fallida; revisar configuración del proveedor (evento %s)', row['id'])
         except Exception:
-            logging.exception('Error procesando la cola SMTP')
+            logging.exception('Error procesando la cola de correo')
         time.sleep(2)
 
 if __name__ == '__main__':

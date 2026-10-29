@@ -521,7 +521,7 @@ Este documento reúne contexto y material útil para varios de ellos; **no compl
 5. Incorporar la ejecución Docker Compose ya aprobada en CI a las evidencias y al manual de instalación.
 6. Capturar evidencias actuales y correo recibido, completar manual, presentación y demostración integral.
 7. La recuperación ya está implementada. La confirmación de correo en el registro y una posible migración a JWT quedan como evolución posterior, no como funciones ya terminadas.
-8. Seleccionar alojamiento gratuito compatible y verificar el despliegue público del frontend, Gateway y microservicios. La migración de las seis bases a Supabase ya está completada.
+8. Completar la conexión de cuentas y verificar el despliegue público del frontend en Vercel y de los siete servicios en Render, según la preparación de la sección 19. La migración de las seis bases a Supabase ya está completada.
 
 Los pagos aparecen como una posibilidad del sistema, no como un servicio adicional ya implementado. Tener seis microservicios supera el mínimo numérico, pero no garantiza la calificación de todos los criterios.
 
@@ -561,3 +561,43 @@ Trabajar en esta carpeta de `optativa`. Leer este documento y verificar el estad
 Por cada cambio terminado: actualizar este contexto si cambian decisiones o estado, ejecutar las comprobaciones apropiadas, revisar secretos y `git diff --check`, crear un commit descriptivo y verificar la subida cuando se publique. No enviar correos reales solo para comprobar textos. Mantener el despliegue y nuevas migraciones como acciones separadas.
 
 La consolidación documental no elimina requisitos de la guía ni las pruebas ejecutables. Evitar volver a crear informes repetidos de historial, decisiones, fuentes o pruebas cuando la información corresponda a una sección de este archivo.
+
+## 19. Preparación del despliegue — 29 de octubre de 2026
+
+El usuario autorizó iniciar la publicación después de terminar recuperación y bloqueo. Se mantiene el presupuesto gratuito. **Preparar y publicar código en GitHub no equivale a tener una web desplegada:** al preparar esta sección todavía no se habían creado servicios ni dominios públicos, conectado las cuentas de Vercel/Render ni autorizado Gmail API.
+
+### Componentes y razones
+
+- **Frontend en Vercel:** aloja únicamente HTML, CSS, JavaScript, imágenes propias y Swagger UI. `tools/build_frontend.mjs` genera `dist/` desde `web/`, elimina residuos de compilaciones anteriores y descomprime el bundle local de Swagger. No copia conexiones, credenciales, bases ni código Python.
+- **API Gateway en un servicio Render propio:** recibe las rutas `/api/*` que Vercel reenvía por HTTPS. Así las cookies siguen perteneciendo al dominio del frontend y no se depende de cookies entre sitios diferentes. `vercel.ts` configura las rutas y agrega una cabecera privada `X-Origin-Secret`; el Gateway exige el mismo secreto y valida el origen de las escrituras. El secreto no forma parte del JavaScript publicado.
+- **Seis servicios Render distintos:** Auth, Notificaciones, Reservas, Catálogo, Habitaciones y Disponibilidad/Inventario. Son seis despliegues y procesos independientes, cada uno con su conexión PostgreSQL exclusiva. El Gateway no recibe conexiones de bases. La clave interna compartida protege las APIs entre procesos; no representa la sesión de un usuario.
+- **Seis bases actuales en Supabase:** se conservan proyectos, datos, esquemas y roles existentes. Render no crea bases nuevas ni utiliza SQLite como alternativa: si falta la URL PostgreSQL propia, el servicio falla al iniciar para evitar perder información en disco efímero.
+- **Contenedores Docker:** cada servicio utiliza el Dockerfile existente con usuario sin privilegios. Escucha en `0.0.0.0` y en el `PORT` asignado por Render. `render.yaml` declara siete planes `free`, región Virginia y comprobaciones `/health`. Las referencias entre servicios usan URLs HTTPS públicas porque los servicios Free no reciben conexiones de la red privada de Render.
+
+### Correo compatible con Render Free
+
+El SMTP de Gmail sigue disponible en local con `MAIL_PROVIDER=smtp`. Render Free bloquea los puertos SMTP 25/465/587, por lo que Notificaciones incorpora una alternativa `MAIL_PROVIDER=gmail_api` que usa HTTPS. No basta trasladar la contraseña de aplicación: esta alternativa requiere un cliente OAuth y un refresh token autorizados por la cuenta remitente dedicada.
+
+`services/gmail_transport.py` renueva el token, conserva temporalmente el acceso en memoria y envía el MIME mediante `users.messages.send`. Solicita únicamente `gmail.send`; no requiere leer el buzón. Un 401 renueva la autorización una vez. Un fallo de entrega mantiene los reintentos persistentes de Notificaciones; una respuesta aceptada queda como `aceptado_api` y conserva la eliminación de enlaces privados de recuperación. La aceptación del proveedor no demuestra recepción en bandeja. Como en SMTP, una interrupción después de aceptar el correo puede producir un reintento duplicado: no se promete entrega exactamente una vez.
+
+El operador puede usar `tools/authorize_gmail.py --client <JSON privado de cliente de escritorio> --sender <remitente>` después de crear el cliente y autorizar el permiso en Google. Usa callback local, estado aleatorio, PKCE y guarda las credenciales exclusivamente en un archivo nuevo de `data/provisioning/`, ignorado por Git; nunca las imprime. La cuenta remitente debe ser la misma que se autoriza. El estado OAuth «Testing» de Google produce refresh tokens que caducan a los siete días para este permiso: hay que resolver el modo de publicación y sus requisitos antes de considerar estable el correo público.
+
+### Orden de publicación y configuración privada
+
+1. Conectar GitHub en Vercel y Render e importar `DodyCe/hotels` con rama `main`. Debe ser una vinculación de GitHub autorizada para que Render detecte commits y resultados de CI; una URL pública sin dicha vinculación solo permite despliegues manuales.
+2. Reservar primero el proyecto y dominio canónico del frontend en Vercel. Usar exactamente ese origen HTTPS en `PUBLIC_ORIGIN` de Gateway, Auth y Notificaciones. No usar dominios de vista previa como origen de recuperación ni permitir orígenes arbitrarios.
+3. Crear los siete servicios a partir de `render.yaml`, completando las seis conexiones desde el `.env` privado, cada una solo en su propietario. `hotels-runtime` genera una única clave interna para los siete servicios. El Gateway genera `ORIGIN_SECRET`. Notificaciones recibe únicamente sus propios valores Gmail OAuth y `SMTP_FROM`; no recibe la contraseña SMTP local.
+4. Configurar `HOTELS_GATEWAY_URL` con la URL real del Gateway y el mismo `ORIGIN_SECRET` en Vercel. El archivo `vercel.ts` rechaza URLs inseguras y secretos ausentes. Activar cookies seguras en Render (`COOKIE_SECURE=1`). Las credenciales se transfieren a variables privadas del proveedor, sin incorporarlas al repositorio o al frontend.
+5. Publicar Vercel y comprobar desde el dominio público: catálogo, sesión y cierre de sesión, permisos de administración, reserva/cancelación e inventario, bandeja y correo real autorizado, recuperación y bloqueo. Verificar también que las URLs directas rechacen las APIs sin sus claves. Este último paso es un pendiente hasta disponer de las cuentas y recursos reales.
+
+### Actualizaciones independientes y límites gratuitos
+
+`tools/ignore_frontend_build.mjs` compara con `VERCEL_GIT_PREVIOUS_SHA`, el último despliegue de la rama, para construir solo si cambia la web o su configuración. `render.yaml` filtra archivos por servicio y solicita desplegar después de aprobar los checks de CI. Un cambio de CSS no reconstruye los siete servicios; un cambio de utilidades compartidas sí reconstruye los afectados. Los primeros despliegues, referencias Git ausentes y cambios de configuración se construyen para no omitir actualizaciones necesarias.
+
+Render Free dispone de 750 horas de instancia compartidas por workspace al mes y puede suspender servicios inactivos. Siete servicios continuamente activos excederían ese cupo: esta elección no garantiza operación ininterrumpida. No se añaden llamadas artificiales para mantenerlos despiertos. Los outbox persisten en Supabase, pero sus trabajadores solo procesan mientras su servicio está activo; por ello el correo puede demorarse si Notificaciones duerme. La web consulta `/api/readiness` al entrar a inicio, administración y recuperación para despertar y comprobar las seis dependencias. Es una espera acotada vinculada a una visita, y nunca repite automáticamente reservas, cancelaciones ni cambios de contraseña.
+
+### Verificación de la preparación
+
+Se comprobaron los archivos de Vercel y Render contra los esquemas públicos de ambos proveedores. Pasaron 121 comprobaciones HTTP de integración con bases SQLite temporales, 11 de configuración, 9 de migración y 3 de OpenAPI. Las pruebas adicionales cubren Gmail HTTPS simulado, renovación y caché de tokens, límites OAuth, aislamiento de variables, Gateway y origen, rechazo de SQLite en Render, cola/redacción de correo y artefacto frontend, además de los filtros de despliegue y el arranque tras inactividad. Estas pruebas no enviaron mensajes reales ni modificaron las seis bases existentes. Ruff y ESLint se ejecutan junto a las pruebas en CI; Docker Compose se valida en GitHub Actions porque Docker no está instalado localmente.
+
+Fuentes técnicas consultadas: [planes Free de Render](https://render.com/docs/free), [Blueprints](https://render.com/docs/blueprint-spec), [despliegues y GitHub](https://render.com/docs/deploys), [configuración Vercel](https://vercel.com/docs/project-configuration/vercel-json), [vercel.ts](https://vercel.com/docs/project-configuration/vercel-ts), [envío Gmail API](https://developers.google.com/workspace/gmail/api/guides/sending) y [caducidad OAuth](https://developers.google.com/identity/protocols/oauth2/).

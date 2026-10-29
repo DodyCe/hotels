@@ -31,7 +31,7 @@ class SecurityEmail(unittest.TestCase):
         return token
 
     def run_worker(self):
-        with patch.dict(os.environ,{'SMTP_HOST':'smtp.example.test','SMTP_USER':'fixture','SMTP_PASSWORD':'fixture-password','SMTP_FROM':'fixture@example.test','SMTP_SECURITY':'starttls','SMTP_PORT':'587'}):
+        with patch.dict(os.environ,{'MAIL_PROVIDER':'smtp','SMTP_HOST':'smtp.example.test','SMTP_USER':'fixture','SMTP_PASSWORD':'fixture-password','SMTP_FROM':'fixture@example.test','SMTP_SECURITY':'starttls','SMTP_PORT':'587'}):
             with patch('notifications.smtplib.SMTP') as smtp, patch('notifications.time.sleep',side_effect=StopIteration):
                 with self.assertRaises(StopIteration):
                     notifications.smtp_worker()
@@ -65,6 +65,32 @@ class SecurityEmail(unittest.TestCase):
         with self.assertRaises(APIError):
             notifications.compose('password.reset',{'resetUrl':'https://other.example.test/reset-password.html#token='+'a'*43},
                                   {'name':'Huésped','email':'fixture@example.test'})
+
+    def test_https_acceptance_redacts_link_without_using_smtp(self):
+        token=self.queue()
+        with patch.dict(os.environ,MAIL_PROVIDER='gmail_api',SMTP_FROM='fixture@example.test'), patch('notifications.gmail_transport.ready',return_value=True):
+            with patch('notifications.gmail_transport.send') as send, patch('notifications.smtplib.SMTP') as smtp:
+                with patch('notifications.time.sleep',side_effect=StopIteration), self.assertRaises(StopIteration):
+                    notifications.smtp_worker()
+        send.assert_called_once()
+        smtp.assert_not_called()
+        self.assertIn('#token='+token,send.call_args.args[0].get_content())
+        with connect('notifications') as db:
+            row=db.execute('SELECT status,body FROM messages').fetchone()
+        self.assertEqual(row['status'],'aceptado_api')
+        self.assertNotIn(token,row['body'])
+
+    def test_failed_https_delivery_keeps_pending_link_for_retry(self):
+        token=self.queue()
+        with patch.dict(os.environ,MAIL_PROVIDER='gmail_api',SMTP_FROM='fixture@example.test'), patch('notifications.gmail_transport.ready',return_value=True):
+            with patch('notifications.gmail_transport.send',side_effect=OSError('fixture')):
+                with patch('notifications.time.sleep',side_effect=StopIteration), self.assertRaises(StopIteration):
+                    notifications.smtp_worker()
+        with connect('notifications') as db:
+            row=db.execute('SELECT status,body,attempts FROM messages').fetchone()
+        self.assertEqual(row['status'],'reintentando')
+        self.assertEqual(row['attempts'],1)
+        self.assertIn(token,row['body'])
 
 
 if __name__=='__main__':

@@ -19,7 +19,7 @@ def main():
     project='hotels-verify-'+uuid.uuid4().hex[:12]
     env=os.environ.copy()
     for key in list(env):
-        if key.endswith('_DATABASE_URL') or key.startswith('SMTP_') or key in ('PUBLIC_ORIGIN','INTERNAL_API_KEY','HOTELS_HTTP_PORT'):
+        if key.endswith('_DATABASE_URL') or key.startswith(('SMTP_','GMAIL_')) or key in ('PUBLIC_ORIGIN','INTERNAL_API_KEY','HOTELS_HTTP_PORT','MAIL_PROVIDER','RENDER','ORIGIN_SECRET'):
             env.pop(key)
     port=os.environ.get('COMPOSE_TEST_PORT','18090')
     base='http://127.0.0.1:'+port

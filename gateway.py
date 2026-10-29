@@ -2,6 +2,9 @@
 import json
 import yaml
 import os
+import concurrent.futures
+import hmac
+import ipaddress
 import urllib.error
 import urllib.request
 from functools import partial
@@ -11,9 +14,10 @@ from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parent
 KEY = os.environ.get('INTERNAL_API_KEY', '')
+ORIGIN_SECRET = os.environ.get('ORIGIN_SECRET','')
 if len(KEY) < 32:
     raise RuntimeError('Usa start.py o configura INTERNAL_API_KEY.')
-PORT = int(os.environ.get('GATEWAY_PORT', '8080'))
+PORT = int(os.environ.get('GATEWAY_PORT') or os.environ.get('PORT', '8080'))
 AUTH = os.environ.get('AUTH_URL', 'http://127.0.0.1:8101')
 NOTIFICATIONS = os.environ.get('NOTIFICATIONS_URL', 'http://127.0.0.1:8102')
 RESERVATIONS = os.environ.get('RESERVATIONS_URL', 'http://127.0.0.1:8103')
@@ -21,7 +25,28 @@ CATALOG = os.environ.get('CATALOG_URL', 'http://127.0.0.1:8104')
 ROOMS = os.environ.get('ROOMS_URL', 'http://127.0.0.1:8105')
 AVAILABILITY = os.environ.get('AVAILABILITY_URL', 'http://127.0.0.1:8106')
 ORIGIN = os.environ.get('PUBLIC_ORIGIN', f'http://127.0.0.1:{PORT}').rstrip('/')
+if os.environ.get('RENDER') == 'true':
+    if len(ORIGIN_SECRET) < 32 or urlsplit(ORIGIN).scheme != 'https' or os.environ.get('GATEWAY_API_ONLY') != '1':
+        raise RuntimeError('Render requiere ORIGIN_SECRET, PUBLIC_ORIGIN HTTPS y GATEWAY_API_ONLY=1.')
+    if any(urlsplit(base).scheme != 'https' for base in (AUTH,NOTIFICATIONS,RESERVATIONS,CATALOG,ROOMS,AVAILABILITY)):
+        raise RuntimeError('Configura las seis URLs HTTPS de los microservicios.')
 ALLOWED_HOSTS = {f'127.0.0.1:{PORT}', f'localhost:{PORT}', urlsplit(ORIGIN).netloc}
+if os.environ.get('RENDER_EXTERNAL_HOSTNAME'):
+    ALLOWED_HOSTS.add(os.environ['RENDER_EXTERNAL_HOSTNAME'])
+
+
+def readiness():
+    def healthy(item):
+        name,base=item
+        try:
+            with urllib.request.urlopen(base+'/health',timeout=5) as response:
+                return name,response.code==200 and json.load(response).get('status')=='ok'
+        except (OSError,ValueError):
+            return name,False
+    services={'auth':AUTH,'notifications':NOTIFICATIONS,'reservations':RESERVATIONS,'catalog':CATALOG,'rooms':ROOMS,'availability':AVAILABILITY}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+        result=dict(pool.map(healthy,services.items()))
+    return {'ready':all(result.values()),'services':result}
 
 class Gateway(SimpleHTTPRequestHandler):
     def end_headers(self):
@@ -41,16 +66,30 @@ class Gateway(SimpleHTTPRequestHandler):
         self.send_header('Content-Length', str(len(body)))
         self.end_headers(); self.wfile.write(body)
 
+    def respond_json(self, status, data):
+        body=json.dumps(data).encode()
+        self.send_response(status)
+        self.send_header('Content-Type','application/json; charset=utf-8')
+        self.send_header('Cache-Control','no-store')
+        self.send_header('Content-Length',str(len(body)))
+        self.end_headers(); self.wfile.write(body)
+
     def handle_route(self):
         host = self.headers.get('Host', '')
         if host not in ALLOWED_HOSTS:
             return self.error_json(403, 'Host no permitido.')
         origin = self.headers.get('Origin')
-        if self.command != 'GET' and origin and origin not in (ORIGIN, f'http://{host}'):
+        allowed_origins = {ORIGIN} if os.environ.get('RENDER') == 'true' else {ORIGIN,f'http://{host}'}
+        if self.command != 'GET' and origin and origin not in allowed_origins:
             return self.error_json(403, 'Origen no permitido.')
         if self.command != 'GET' and self.headers.get('Sec-Fetch-Site') == 'cross-site':
             return self.error_json(403, 'Solicitud externa no permitida.')
         path = urlsplit(self.path).path
+        if ORIGIN_SECRET and (path.startswith('/api/') or path in ('/openapi.json','/openapi-internal.json')):
+            if not hmac.compare_digest(self.headers.get('X-Origin-Secret',''),ORIGIN_SECRET):
+                return self.error_json(403,'Acceso al Gateway requerido desde Hotels.')
+        if path == '/api/readiness' and self.command == 'GET':
+            return self.respond_json(200,readiness())
         if self.command == 'GET' and path in ('/openapi.json','/openapi-internal.json'):
             filename = 'internal-openapi.yaml' if path == '/openapi-internal.json' else 'openapi.yaml'
             body = json.dumps(yaml.safe_load((ROOT/'docs'/filename).read_text(encoding='utf-8')),ensure_ascii=False).encode()
@@ -69,6 +108,8 @@ class Gateway(SimpleHTTPRequestHandler):
         if path == '/health' and self.command == 'GET':
             self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers(); self.wfile.write(b'{"status":"ok","service":"gateway"}'); return
         if not path.startswith('/api/'):
+            if os.environ.get('GATEWAY_API_ONLY') == '1':
+                return self.error_json(404,'Este servicio publica únicamente la API de Hotels.')
             if self.command != 'GET':
                 return self.error_json(405, 'Método no permitido.')
             if any(part.startswith('.') for part in unquote(path).split('/') if part):
@@ -90,7 +131,13 @@ class Gateway(SimpleHTTPRequestHandler):
         else:
             return self.error_json(404, 'Ruta no encontrada.')
         payload = None
-        headers = {'X-Internal-Key': KEY, 'X-Client-IP': self.client_address[0], 'Cookie': self.headers.get('Cookie', '')}
+        client_ip = self.client_address[0]
+        if ORIGIN_SECRET:
+            try:
+                client_ip=str(ipaddress.ip_address(self.headers.get('X-Real-IP','')))
+            except ValueError:
+                pass
+        headers = {'X-Internal-Key': KEY, 'X-Client-IP': client_ip, 'Cookie': self.headers.get('Cookie', '')}
         if self.command in ('POST','PATCH','PUT'):
             if self.headers.get_content_type() != 'application/json':
                 return self.error_json(415, 'Se requiere application/json.')
@@ -108,7 +155,7 @@ class Gateway(SimpleHTTPRequestHandler):
         except urllib.error.HTTPError as error:
             response = error
         except (OSError, TimeoutError):
-            return self.error_json(503, 'No se pudo conectar con los servicios. Inicia la aplicación con INICIAR.cmd.')
+            return self.error_json(503, 'No se pudo conectar con los servicios. Espera un momento e intenta nuevamente.')
         with response:
             body = response.read()
             self.send_response(response.code)

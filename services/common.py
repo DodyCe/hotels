@@ -51,6 +51,8 @@ def connect(name):
         with postgres.connect(name) as db:
             yield db
         return
+    if os.environ.get('RENDER') == 'true':
+        raise RuntimeError('El despliegue requiere la conexión PostgreSQL propia del microservicio.')
     db = sqlite3.connect(DATA / (name + '.sqlite3'), timeout=15)
     try:
         db.row_factory = sqlite3.Row

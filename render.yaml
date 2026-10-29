@@ -1,0 +1,309 @@
+# Siete servicios Free; las seis bases existentes permanecen en Supabase.
+services:
+- type: web
+  name: hotels-gateway
+  runtime: docker
+  plan: free
+  region: virginia
+  repo: https://github.com/DodyCe/hotels
+  branch: main
+  autoDeployTrigger: checksPass
+  dockerfilePath: ./Dockerfile
+  dockerCommand: python gateway.py
+  healthCheckPath: /health
+  buildFilter:
+    paths:
+    - gateway.py
+    - Dockerfile
+    - .dockerignore
+    - requirements.txt
+    - render.yaml
+    - docs/*.yaml
+  envVars:
+  - fromGroup: hotels-runtime
+  - key: AUTH_URL
+    fromService:
+      type: web
+      name: hotels-auth
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: NOTIFICATIONS_URL
+    fromService:
+      type: web
+      name: hotels-notifications
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: RESERVATIONS_URL
+    fromService:
+      type: web
+      name: hotels-reservations
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: CATALOG_URL
+    fromService:
+      type: web
+      name: hotels-catalog
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: ROOMS_URL
+    fromService:
+      type: web
+      name: hotels-rooms
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: AVAILABILITY_URL
+    fromService:
+      type: web
+      name: hotels-availability
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: PUBLIC_ORIGIN
+    sync: false
+  - key: GATEWAY_API_ONLY
+    value: '1'
+  - key: GATEWAY_BIND
+    value: 0.0.0.0
+  - key: ORIGIN_SECRET
+    generateValue: true
+- type: web
+  name: hotels-auth
+  runtime: docker
+  plan: free
+  region: virginia
+  repo: https://github.com/DodyCe/hotels
+  branch: main
+  autoDeployTrigger: checksPass
+  dockerfilePath: ./Dockerfile
+  dockerCommand: python services/auth.py
+  healthCheckPath: /health
+  buildFilter:
+    paths:
+    - services/auth.py
+    - Dockerfile
+    - .dockerignore
+    - requirements.txt
+    - render.yaml
+    - services/common.py
+    - services/postgres.py
+    - services/validation.py
+    - services/account_security.py
+    - seed/**
+  envVars:
+  - fromGroup: hotels-runtime
+  - key: NOTIFICATIONS_URL
+    fromService:
+      type: web
+      name: hotels-notifications
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: PUBLIC_ORIGIN
+    sync: false
+  - key: AUTH_DATABASE_URL
+    sync: false
+- type: web
+  name: hotels-notifications
+  runtime: docker
+  plan: free
+  region: virginia
+  repo: https://github.com/DodyCe/hotels
+  branch: main
+  autoDeployTrigger: checksPass
+  dockerfilePath: ./Dockerfile
+  dockerCommand: python services/notifications.py
+  healthCheckPath: /health
+  buildFilter:
+    paths:
+    - services/notifications.py
+    - Dockerfile
+    - .dockerignore
+    - requirements.txt
+    - render.yaml
+    - services/common.py
+    - services/postgres.py
+    - services/validation.py
+    - services/account_security.py
+    - seed/**
+    - services/gmail_transport.py
+  envVars:
+  - fromGroup: hotels-runtime
+  - key: AUTH_URL
+    fromService:
+      type: web
+      name: hotels-auth
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: PUBLIC_ORIGIN
+    sync: false
+  - key: NOTIFICATIONS_DATABASE_URL
+    sync: false
+  - key: MAIL_PROVIDER
+    value: gmail_api
+  - key: GMAIL_CLIENT_ID
+    sync: false
+  - key: GMAIL_CLIENT_SECRET
+    sync: false
+  - key: GMAIL_REFRESH_TOKEN
+    sync: false
+  - key: SMTP_FROM
+    sync: false
+- type: web
+  name: hotels-reservations
+  runtime: docker
+  plan: free
+  region: virginia
+  repo: https://github.com/DodyCe/hotels
+  branch: main
+  autoDeployTrigger: checksPass
+  dockerfilePath: ./Dockerfile
+  dockerCommand: python services/reservations.py
+  healthCheckPath: /health
+  buildFilter:
+    paths:
+    - services/reservations.py
+    - Dockerfile
+    - .dockerignore
+    - requirements.txt
+    - render.yaml
+    - services/common.py
+    - services/postgres.py
+    - services/validation.py
+    - services/account_security.py
+    - seed/**
+  envVars:
+  - fromGroup: hotels-runtime
+  - key: AUTH_URL
+    fromService:
+      type: web
+      name: hotels-auth
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: CATALOG_URL
+    fromService:
+      type: web
+      name: hotels-catalog
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: ROOMS_URL
+    fromService:
+      type: web
+      name: hotels-rooms
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: AVAILABILITY_URL
+    fromService:
+      type: web
+      name: hotels-availability
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: NOTIFICATIONS_URL
+    fromService:
+      type: web
+      name: hotels-notifications
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: RESERVATIONS_DATABASE_URL
+    sync: false
+- type: web
+  name: hotels-catalog
+  runtime: docker
+  plan: free
+  region: virginia
+  repo: https://github.com/DodyCe/hotels
+  branch: main
+  autoDeployTrigger: checksPass
+  dockerfilePath: ./Dockerfile
+  dockerCommand: python services/catalog.py
+  healthCheckPath: /health
+  buildFilter:
+    paths:
+    - services/catalog.py
+    - Dockerfile
+    - .dockerignore
+    - requirements.txt
+    - render.yaml
+    - services/common.py
+    - services/postgres.py
+    - services/validation.py
+    - services/account_security.py
+    - seed/**
+  envVars:
+  - fromGroup: hotels-runtime
+  - key: AUTH_URL
+    fromService:
+      type: web
+      name: hotels-auth
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: CATALOG_DATABASE_URL
+    sync: false
+- type: web
+  name: hotels-rooms
+  runtime: docker
+  plan: free
+  region: virginia
+  repo: https://github.com/DodyCe/hotels
+  branch: main
+  autoDeployTrigger: checksPass
+  dockerfilePath: ./Dockerfile
+  dockerCommand: python services/rooms.py
+  healthCheckPath: /health
+  buildFilter:
+    paths:
+    - services/rooms.py
+    - Dockerfile
+    - .dockerignore
+    - requirements.txt
+    - render.yaml
+    - services/common.py
+    - services/postgres.py
+    - services/validation.py
+    - services/account_security.py
+    - seed/**
+  envVars:
+  - fromGroup: hotels-runtime
+  - key: AUTH_URL
+    fromService:
+      type: web
+      name: hotels-auth
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: CATALOG_URL
+    fromService:
+      type: web
+      name: hotels-catalog
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: AVAILABILITY_URL
+    fromService:
+      type: web
+      name: hotels-availability
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: ROOMS_DATABASE_URL
+    sync: false
+- type: web
+  name: hotels-availability
+  runtime: docker
+  plan: free
+  region: virginia
+  repo: https://github.com/DodyCe/hotels
+  branch: main
+  autoDeployTrigger: checksPass
+  dockerfilePath: ./Dockerfile
+  dockerCommand: python services/availability.py
+  healthCheckPath: /health
+  buildFilter:
+    paths:
+    - services/availability.py
+    - Dockerfile
+    - .dockerignore
+    - requirements.txt
+    - render.yaml
+    - services/common.py
+    - services/postgres.py
+    - services/validation.py
+    - services/account_security.py
+    - seed/**
+  envVars:
+  - fromGroup: hotels-runtime
+  - key: AUTH_URL
+    fromService:
+      type: web
+      name: hotels-auth
+      envVarKey: RENDER_EXTERNAL_URL
+  - key: AVAILABILITY_DATABASE_URL
+    sync: false
+envVarGroups:
+- name: hotels-runtime
+  envVars:
+  - key: INTERNAL_API_KEY
+    generateValue: true
+  - key: SERVICE_BIND
+    value: 0.0.0.0
+  - key: HOTELS_DATA_DIR
+    value: /data
+  - key: COOKIE_SECURE
+    value: '1'

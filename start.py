@@ -93,7 +93,7 @@ def main():
                 process.kill()
 
 def service_environment(path):
-    """Cada proceso recibe únicamente su conexión de base y su configuración SMTP."""
+    """Cada proceso recibe únicamente su conexión y los secretos que le pertenecen."""
     env = os.environ.copy()
     owned = {'services/auth.py': 'AUTH_DATABASE_URL',
              'services/notifications.py': 'NOTIFICATIONS_DATABASE_URL',
@@ -107,8 +107,11 @@ def service_environment(path):
             env.pop(key, None)
     if path != 'services/notifications.py':
         for key in list(env):
-            if key.startswith('SMTP_'):
+            if key.startswith(('SMTP_','GMAIL_')) or key == 'MAIL_PROVIDER':
                 env.pop(key)
+    if path != 'gateway.py':
+        env.pop('ORIGIN_SECRET',None)
+    env.pop('HOTELS_GATEWAY_URL',None)
     return env
 
 
