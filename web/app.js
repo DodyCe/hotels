@@ -137,12 +137,18 @@ async function showReservations() {
     const data = await api('/reservations');
     openModal(`<p class="eyebrow">TUS PLANES EN MONTERÍA</p><h2>Mis reservas</h2><p>Consulta tus próximas estancias y el estado de tus reservas.</p><button class="button secondary" id="refresh-reservations">Actualizar reservas</button>${data.reservations.length ? data.reservations.map((r) => `<article class="reservation-item"><h3>${escapeHTML(r.hotel)}</h3><p>${r.id} · <strong>${r.status}</strong><br>${escapeHTML(r.room)}<br>${dateText(r.checkin)} – ${dateText(r.checkout)}<br>${r.guests} ${r.guests === 1 ? 'adulto' : 'adultos'} · ${money(r.total)} COP</p>${['Confirmada','Pendiente'].includes(r.status) ? `<button class="cancel-button" data-cancel="${r.id}">Cancelar reserva</button>` : ''}</article>`).join('') : '<div class="reservation-item"><p>Todavía no tienes reservas. Explora los hoteles para empezar.</p></div>'}`);
     $('#refresh-reservations').addEventListener('click',showReservations);
-    document.querySelectorAll('[data-cancel]').forEach((button) => button.addEventListener('click', () => withBusy(button, async () => {
-      const result = await api(`/reservations/${button.dataset.cancel}/cancel`, {});
-      try { await refreshAvailability(); } catch { /* La cancelación se conserva y será reconciliada. */ }
-      await showReservations(); toast(result.status === 'Cancelando' ? 'Cancelación en proceso. Actualiza tus reservas para consultar el resultado.' : 'Reserva cancelada. Estamos preparando el aviso para tu correo.');
-    })));
+    document.querySelectorAll('[data-cancel]').forEach((button) => button.addEventListener('click', () => confirmCancel(data.reservations.find((r) => r.id === button.dataset.cancel))));
   } catch (error) { openModal(`<h2>Mis reservas</h2><p>${escapeHTML(error.message)}</p>`); }
+}
+function confirmCancel(r) {
+  openModal(`<p class="eyebrow">CANCELAR RESERVA</p><h2>¿Cancelar esta reserva?</h2><p><strong>${escapeHTML(r.hotel)}</strong><br>${escapeHTML(r.room)}<br>${dateText(r.checkin)} – ${dateText(r.checkout)}<br>${escapeHTML(r.id)} · ${money(r.total)} COP</p><p class="modal-hint">La habitación quedará libre para otros huéspedes. Esta acción no se puede deshacer.</p><p class="form-error" id="form-error" role="alert"></p><div class="modal-actions"><button class="button secondary" id="keep-reservation">Volver</button><button class="button danger" id="confirm-cancel">Sí, cancelar</button></div>`);
+  $('#keep-reservation').addEventListener('click', showReservations);
+  $('#keep-reservation').focus();
+  $('#confirm-cancel').addEventListener('click', (event) => withBusy(event.currentTarget, async () => {
+    const result = await api(`/reservations/${encodeURIComponent(r.id)}/cancel`, {});
+    try { await refreshAvailability(); } catch { /* La cancelación se conserva y será reconciliada. */ }
+    await showReservations(); toast(result.status === 'Cancelando' ? 'Cancelación en proceso. Actualiza tus reservas para consultar el resultado.' : 'Reserva cancelada. Estamos preparando el aviso para tu correo.');
+  }));
 }
 async function showNotifications() {
   if (!state.user) return showAuth();
