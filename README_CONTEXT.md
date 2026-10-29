@@ -1,8 +1,18 @@
 # Hotels — contexto completo del proyecto
 
-Actualizado el **28 de octubre de 2026**. Este es el documento central de contexto, funcionamiento, herramientas, decisiones, verificación e historial de Hotels. Reúne la información antes distribuida en `HISTORIAL_PROYECTO.md`, `DECISIONES_TECNICAS.md`, `PRUEBAS.md`, `SUPABASE.md` y `FUENTES.md`.
+Actualizado el **29 de octubre de 2026**. Este es el documento central de contexto, funcionamiento, herramientas, decisiones, verificación e historial de Hotels. Reúne la información antes distribuida en `HISTORIAL_PROYECTO.md`, `DECISIONES_TECNICAS.md`, `PRUEBAS.md`, `SUPABASE.md` y `FUENTES.md`.
 
 Los resultados de ejecución que se citan conservan sus fechas. Tener código escrito, un proveedor configurado o un commit publicado no significa haber completado un despliegue público ni todos los entregables.
+
+### Avance del 29 de octubre — administración, Docker y consola OpenAPI
+
+El usuario pidió completar esos tres puntos funcionales antes de organizar el documento de entrega. La nueva versión está publicada en la rama `codex/administracion-docker-openapi` (código validado `ca54b04`, contexto `c9db1f2`) y se conserva en el checkout `C:\Users\DODY\Documents\Codex\2026-10-15\rev\work\hotels-review-oct28-f838cbb`. Incluye administración de hoteles, habitaciones, huéspedes e inventario; roles verificados por Auth; retiros lógicos; recuperación de altas pendientes; y Swagger UI local con contratos públicos e internos separados.
+
+Aprobaron 96 comprobaciones HTTP con SQLite aislado, 11 de configuración, nueve de migración y dos de OpenAPI. La ejecución [40930179895](https://github.com/DodyCe/hotels/actions/runs/40930179895) aprobó los cuatro trabajos de CI, incluido Docker Compose con siete contenedores sanos y 13 comprobaciones del flujo de negocio. Son 131 comprobaciones de esta etapa, sin usar correo ni credenciales reales en Docker. El panel se probó desde navegador con alta de hotel/habitación/huésped, retiro/reactivación, consulta protegida desde Swagger y tamaños móvil/escritorio sin desbordamiento. Las capturas están en `rev/work`.
+
+La migración nueva de Habitaciones ya se aplicó, conservó sus seis filas y verificó RLS y el permiso UPDATE. Su respaldo quedó en `data/backups/rooms-admin-20261029T182301Z/rooms.json`. **Faltan las migraciones de Auth y Catálogo, porque el conector Supabase caducó y aún no hay acceso administrativo disponible para ambos.** También falta que el usuario indique qué correo de su cuenta Hotels será administrador. Solo se creó/promovió una cuenta ficticia en los datos aislados de QA.
+
+La vista nueva funciona en `http://127.0.0.1:8081/`, con SQLite temporal y SMTP desactivado. `main` y la instancia normal de 8080 mantienen el backend estable con las seis bases Supabase. Se devolvió la carpeta principal a `main` para que siga arrancando normalmente; no se debe fusionar/activar el backend nuevo hasta aplicar las dos migraciones pendientes y probar de nuevo los seis PostgreSQL. La rama conserva las migraciones, el panel y la explicación completa de esta etapa. El conector GitHub rechazó crear un PR con HTTP 403; la rama se publicó mediante Git y CI se activó directamente para pushes de ramas.
 
 ### Actualización del 26 de octubre de 2026 — migración de Reservas e Inventario
 
