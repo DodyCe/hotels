@@ -1,4 +1,5 @@
 """Notificaciones: resuelve destinatarios en Auth y entrega por SMTP configurable."""
+import hashlib
 import json
 import logging
 import os
@@ -82,7 +83,7 @@ def smtp_worker():
                         raise ValueError('SMTP_FROM requerido')
                     message = EmailMessage()
                     message['From'], message['To'], message['Subject'] = sender, row['recipient'], row['subject']
-                    message['Message-ID'] = '<' + __import__('hashlib').sha256(row['id'].encode()).hexdigest() + '@hotels.local>'
+                    message['Message-ID'] = '<' + hashlib.sha256(row['id'].encode()).hexdigest() + '@hotels.local>'
                     message.set_content(row['body'])
                     mode = os.environ.get('SMTP_SECURITY', 'starttls').lower()
                     if mode not in ('ssl', 'starttls'):
