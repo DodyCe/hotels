@@ -128,6 +128,7 @@ def admin_checks(customer,data_dir,password,email):
     check(request(admin,'/api/auth/me')[1]['user']['role']=='admin','Auth resuelve el rol actual en el servidor')
     check(request(admin,'/api/guests')[0]==200,'El administrador puede consultar los perfiles de huéspedes')
     if USE_POSTGRES:
+        postgres_admin_write_checks()
         # CRUD completo se ejecuta en SQLite aislado y Docker; no deja hoteles de prueba en las bases compartidas.
         return
     hotel={'name':'Hotel de validación','area':'Centro','address':'Calle de validación 1','description':'Hotel temporal de las pruebas de administración.','source':'https://example.test','tags':['wifi'],'amenities':['Wi-Fi']}
@@ -179,6 +180,32 @@ def admin_checks(customer,data_dir,password,email):
     with urllib.request.urlopen(BASE+'/openapi-internal.json') as response:spec=json.load(response)
     check('/internal/inventory' in spec['paths'] and '/internal/allocate' in spec['paths'],'OpenAPI documenta la comunicación interna sin exponerla en el Gateway')
 
+
+
+def postgres_admin_write_checks():
+    """GRANT UPDATE sin política RLS puede completar la consulta sin cambiar filas."""
+    import postgres
+    identifier = 'rollback-' + RUN_TAG
+    for service, table in (('auth','guests'),('catalog','hotels'),('rooms','rooms')):
+        if service not in POSTGRES_SERVICES:
+            continue
+        with postgres.connect(service) as db:
+            if service == 'auth':
+                db.execute('INSERT INTO guests(id,name,email,created) VALUES (?,?,?,?)',
+                           (identifier,'Validación transaccional',identifier+'@example.test',time.time()))
+            elif service == 'catalog':
+                db.execute('INSERT INTO hotels(id,document,sort_order,active) VALUES (?,?,?,1)',
+                           (identifier,json.dumps({'id':identifier,'name':'Validación transaccional'}),99999))
+            else:
+                db.execute('INSERT INTO rooms(id,"hotelId",name,capacity,price,sort_order,inventory_ready,initial_units) VALUES (?,?,?,?,?,?,0,?)',
+                           (identifier,'ghl-monteria','Validación transaccional',2,100000,99999,1))
+            db.execute('UPDATE '+table+' SET active=0 WHERE id=?',(identifier,))
+            row = db.execute('SELECT active FROM '+table+' WHERE id=?',(identifier,)).fetchone()
+            check(row and row['active']==0,service+': el rol propio inserta y edita con RLS activo')
+            db.connection.rollback()
+        with postgres.connect(service) as db:
+            check(not db.execute('SELECT 1 FROM '+table+' WHERE id=?',(identifier,)).fetchone(),
+                  service+': el rollback no deja registros de comprobación')
 
 
 def available(opener,room,start,end):
