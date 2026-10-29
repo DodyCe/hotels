@@ -123,6 +123,11 @@ function render() {
   });
   const selected = hotels.find((h) => h.id === state.selected);
   ['.selected-hotel','.booking-details','.price-lines','.total'].forEach((selector) => { $(selector).hidden = !selected; });
+  $('#mobile-bar').hidden = !selected;
+  if (selected) {
+    $('#mobile-bar-name').textContent = `${selected.name} · ${nights()} ${nights() === 1 ? 'noche' : 'noches'}`;
+    $('#mobile-bar-total').textContent = `${money(selected.price*nights())} COP`;
+  }
   updateButton();
   if (selected) {
     $('#summary-image').src = selected.image; $('#summary-name').textContent = selected.name;
@@ -280,6 +285,11 @@ $('.filters').addEventListener('click', (event) => { const button = event.target
 $('#sort').addEventListener('change', (event) => { state.sort = event.target.value; renderWithTransition(); });
 $('#max-price').addEventListener('change', (event) => { state.maxPrice = Number(event.target.value); renderWithTransition(); });
 reveal($('.sources'));
+$('#mobile-bar-button').addEventListener('click', showBooking);
+// La barra se oculta mientras el panel «Tu estancia» está a la vista, para no duplicarlo.
+if ('IntersectionObserver' in window) new IntersectionObserver(([entry]) => {
+  $('#mobile-bar').classList.toggle('tucked', entry.isIntersecting); $('#mobile-bar').inert = entry.isIntersecting;
+}).observe($('.booking'));
 $('#search-form').addEventListener('submit', async (event) => {
   event.preventDefault(); const a = $('#checkin').value, b = $('#checkout').value;
   const length = (Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000;
