@@ -30,6 +30,8 @@ Verificaciones locales: 96 comprobaciones HTTP con SQLite temporal, 11 de config
 
 **Arranque normal comprobado:** Gateway y seis servicios devolvieron health HTTP 200; los seis servicios declararon `postgresql`. Las rutas de administración, Swagger y ambos contratos respondieron 200, el bundle gzip local se validó y la consulta de huéspedes sin sesión respondió 401. Se comprobaron los conteos finales de las seis bases: Auth 2 usuarios/2 huéspedes/0 sesiones/2 eventos; Notificaciones 6 mensajes; Catálogo 3 hoteles; Habitaciones 6 tipos; Reservas 2 reservas/4 eventos; Inventario 6 registros/1 asignación. Los datos de las comprobaciones no quedaron en las bases y no se enviaron mensajes reales nuevos.
 
+La integración se publicó en `main` como `258cd62`. Su ejecución de CI [40944082013](https://github.com/DodyCe/hotels/actions/runs/40944082013) aprobó los cuatro trabajos: lint/pre-commit, frontend, suites locales y Docker Compose. Esa ejecución confirma también la versión final de código posterior a la corrección RLS; las 79 comprobaciones remotas se ejecutaron localmente con las conexiones privadas, que no se entregan a GitHub Actions.
+
 ### Actualización del 26 de octubre de 2026 — migración de Reservas e Inventario
 
 El usuario confirmó que los dos servicios de esta etapa son **Reservas** y **Disponibilidad e inventario**. Disponibilidad e inventario es un solo dominio y proceso (`services/availability.py`, puerto 8106): conserva las unidades/asignaciones y calcula las unidades libres por fechas. Separarlo en dos dominios sería otro cambio de arquitectura, que no se ha solicitado ni implementado. El total sigue siendo seis microservicios.
