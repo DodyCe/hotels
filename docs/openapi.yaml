@@ -1,0 +1,735 @@
+openapi: 3.1.0
+info:
+  title: Hotels API
+  version: 1.0.0
+  summary: API pública del Gateway de Hotels.
+  description: |
+    API que el navegador consume a través del Gateway (puerto 8080). El Gateway
+    quita el prefijo `/api` y reenvía cada ruta al microservicio dueño del dominio:
+
+    | Prefijo | Microservicio | Puerto interno |
+    |---|---|---|
+    | `/api/auth/*` | Autenticación | 8101 |
+    | `/api/notifications` | Notificaciones | 8102 |
+    | `/api/reservations*` | Reservas | 8103 |
+    | `/api/hotels*` | Catálogo de hoteles | 8104 |
+    | `/api/rooms*` | Habitaciones | 8105 |
+    | `/api/availability`, `/api/inventory` | Disponibilidad e inventario | 8106 |
+
+    Reglas comunes del Gateway:
+    - Solo acepta `Host` locales o el de `PUBLIC_ORIGIN`; los `POST` con otro `Origin` o
+      `Sec-Fetch-Site: cross-site` reciben 403.
+    - Los `POST` exigen `Content-Type: application/json` y un cuerpo de 1 a 16384 bytes.
+    - Si un microservicio no responde, el Gateway devuelve 503.
+    - Las rutas `/internal/*` (asignación, liberación, reconciliación, eventos y consulta
+      de usuarios) son comunicación entre servicios con `X-Internal-Key` y no están
+      expuestas por el Gateway.
+
+    Todas las respuestas son JSON y llevan `Cache-Control: no-store`. Los errores tienen
+    la forma `{"error": "mensaje"}`.
+servers:
+  - url: http://127.0.0.1:8080/api
+    description: Gateway local (INICIAR.cmd o docker compose)
+tags:
+  - name: Autenticación
+  - name: Catálogo
+  - name: Habitaciones
+  - name: Disponibilidad
+  - name: Reservas
+  - name: Notificaciones
+paths:
+  /auth/register:
+    post:
+      tags: [Autenticación]
+      summary: Crear cuenta e iniciar sesión
+      description: Crea la cuenta, abre una sesión de 8 horas y encola el correo de bienvenida. Comparte con el inicio de sesión el límite de 12 intentos por minuto por IP.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Cuenta creada y sesión iniciada.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: No se puede registrar ese correo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/login:
+    post:
+      tags: [Autenticación]
+      summary: Iniciar sesión
+      description: Valida la contraseña (scrypt) y rota la sesión presentada.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Sesión iniciada.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Correo o contraseña incorrectos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/me:
+    get:
+      tags: [Autenticación]
+      summary: Usuario de la sesión actual
+      operationId: currentUser
+      security:
+        - session: []
+      responses:
+        '200':
+          description: Perfil de la cuenta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/logout:
+    post:
+      tags: [Autenticación]
+      summary: Cerrar sesión
+      description: Revoca la sesión en el servidor y borra la cookie. El cuerpo puede ser `{}`.
+      operationId: logout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyObject'
+      responses:
+        '200':
+          description: Sesión cerrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+  /hotels:
+    get:
+      tags: [Catálogo]
+      summary: Listar hoteles
+      operationId: listHotels
+      responses:
+        '200':
+          description: Hoteles de referencia en el orden del catálogo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [hotels]
+                properties:
+                  hotels:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Hotel'
+  /hotels/{hotelId}:
+    get:
+      tags: [Catálogo]
+      summary: Consultar un hotel
+      operationId: getHotel
+      parameters:
+        - name: hotelId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: ghl-monteria
+      responses:
+        '200':
+          description: Hotel encontrado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [hotel]
+                properties:
+                  hotel:
+                    $ref: '#/components/schemas/Hotel'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /rooms:
+    get:
+      tags: [Habitaciones]
+      summary: Listar tipos de habitación
+      operationId: listRooms
+      parameters:
+        - name: hotelId
+          in: query
+          required: false
+          description: Solo los tipos de este hotel.
+          schema:
+            type: string
+        - name: guests
+          in: query
+          required: false
+          description: Solo los tipos con capacidad para este número de huéspedes.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 1
+      responses:
+        '200':
+          description: Tipos de habitación que cumplen los filtros.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rooms]
+                properties:
+                  rooms:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Room'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /rooms/{roomId}:
+    get:
+      tags: [Habitaciones]
+      summary: Consultar un tipo de habitación
+      operationId: getRoom
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: ghl-monteria-principal
+      responses:
+        '200':
+          description: Tipo de habitación encontrado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [room]
+                properties:
+                  room:
+                    $ref: '#/components/schemas/Room'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /inventory:
+    get:
+      tags: [Disponibilidad]
+      summary: Unidades por tipo de habitación
+      operationId: listInventory
+      responses:
+        '200':
+          description: Inventario total por tipo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [inventory]
+                properties:
+                  inventory:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InventoryItem'
+  /availability:
+    get:
+      tags: [Disponibilidad]
+      summary: Disponibilidad por rango de fechas
+      description: |
+        Unidades libres de cada tipo en todas las noches del rango. La fecha de salida no
+        ocupa noche. Las fechas se validan con el calendario de Montería (UTC-5): llegada
+        desde hoy y estancia de 1 a 30 noches.
+      operationId: getAvailability
+      parameters:
+        - $ref: '#/components/parameters/Checkin'
+        - $ref: '#/components/parameters/Checkout'
+      responses:
+        '200':
+          description: Disponibilidad por tipo de habitación.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [availability]
+                properties:
+                  availability:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AvailabilityItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /reservations:
+    get:
+      tags: [Reservas]
+      summary: Reservas de la cuenta
+      operationId: listReservations
+      security:
+        - session: []
+      responses:
+        '200':
+          description: Reservas propias, de la más reciente a la más antigua.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reservations]
+                properties:
+                  reservations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Reservation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Reservas]
+      summary: Crear una reserva
+      description: |
+        El precio y el propietario los decide el servidor. Reservas consulta la habitación
+        y el hotel por API y pide la asignación a Inventario. Si Inventario no responde, la
+        reserva queda `Pendiente` (202) y un trabajador la confirma o rechaza después.
+      operationId: createReservation
+      security:
+        - session: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationRequest'
+      responses:
+        '201':
+          description: Reserva confirmada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+        '202':
+          description: Reserva guardada como Pendiente hasta que Inventario responda.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: La habitación no tiene cupos para esas fechas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /reservations/{reservationId}/cancel:
+    post:
+      tags: [Reservas]
+      summary: Cancelar una reserva propia
+      description: Idempotente. Si Inventario no responde, queda `Cancelando` (202) y se completa al recuperarlo. El cuerpo puede ser `{}`.
+      operationId: cancelReservation
+      security:
+        - session: []
+      parameters:
+        - name: reservationId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: HT-3F9A1C2B7D
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyObject'
+      responses:
+        '200':
+          description: Reserva cancelada, o ya estaba cancelada o rechazada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelResponse'
+        '202':
+          description: Cancelación en proceso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: La reserva no existe o pertenece a otra cuenta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /notifications:
+    get:
+      tags: [Notificaciones]
+      summary: Avisos de la cuenta
+      description: Hasta 100 mensajes, del más reciente al más antiguo. El destinatario siempre es el correo de la cuenta en Auth.
+      operationId: listNotifications
+      security:
+        - session: []
+      responses:
+        '200':
+          description: Mensajes y estado del envío por SMTP.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [notifications, smtpConfigured]
+                properties:
+                  notifications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+                  smtpConfigured:
+                    type: boolean
+                    description: Si es falso, los mensajes quedan solo como vista previa en la web.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: hotels_session
+      description: Token opaco de sesión (8 horas). Cookie `HttpOnly`, `SameSite=Strict` y `Secure` con `COOKIE_SECURE=1`.
+  headers:
+    SessionCookie:
+      description: '`hotels_session=<token>; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800`'
+      schema:
+        type: string
+  parameters:
+    Checkin:
+      name: checkin
+      in: query
+      required: true
+      description: Fecha de llegada (AAAA-MM-DD).
+      schema:
+        type: string
+        format: date
+      example: '2026-11-04'
+    Checkout:
+      name: checkout
+      in: query
+      required: true
+      description: Fecha de salida (AAAA-MM-DD), de 1 a 30 noches después de la llegada.
+      schema:
+        type: string
+        format: date
+      example: '2026-11-07'
+  responses:
+    BadRequest:
+      description: Datos inválidos.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: No hay una sesión válida.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Inicia sesión para continuar.
+    NotFound:
+      description: Recurso inexistente.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooManyRequests:
+      description: Demasiados intentos desde la misma IP en un minuto.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unavailable:
+      description: Un microservicio no está disponible.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+      example:
+        error: Selecciona fechas AAAA-MM-DD desde hoy, con una estancia de 1 a 30 noches.
+    Ok:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          const: true
+    EmptyObject:
+      type: object
+      example: {}
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 10
+          maxLength: 128
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 10
+          maxLength: 128
+    User:
+      type: object
+      required: [id, name, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        created:
+          type: number
+          description: Fecha de alta en segundos Unix.
+    UserResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+    Hotel:
+      type: object
+      required: [id, name, city, area, address, description, tags, amenities, image, photographer, photoPage, source, badge]
+      properties:
+        id:
+          type: string
+          example: ghl-monteria
+        name:
+          type: string
+          example: GHL Hotel Montería
+        city:
+          type: string
+        area:
+          type: string
+        address:
+          type: string
+        description:
+          type: string
+        tags:
+          type: array
+          description: Claves de los filtros de la web.
+          items:
+            type: string
+            enum: [wifi, restaurant, work]
+        amenities:
+          type: array
+          items:
+            type: string
+        image:
+          type: string
+          format: uri
+          description: Foto ilustrativa de Unsplash; no corresponde al hotel.
+        photographer:
+          type: string
+        photoPage:
+          type: string
+          format: uri
+        source:
+          type: string
+          format: uri
+          description: Sitio oficial del hotel de referencia.
+        badge:
+          type: string
+    Room:
+      type: object
+      required: [id, hotelId, name, capacity, price]
+      properties:
+        id:
+          type: string
+          example: ghl-monteria-principal
+        hotelId:
+          type: string
+          example: ghl-monteria
+        name:
+          type: string
+          example: Business Superior
+        capacity:
+          type: integer
+          example: 4
+        price:
+          type: integer
+          description: Tarifa de ejemplo por noche, en pesos colombianos.
+          example: 350000
+    InventoryItem:
+      type: object
+      required: [roomId, total]
+      properties:
+        roomId:
+          type: string
+        total:
+          type: integer
+          minimum: 1
+    AvailabilityItem:
+      type: object
+      required: [roomId, total, available]
+      properties:
+        roomId:
+          type: string
+        total:
+          type: integer
+        available:
+          type: integer
+          minimum: 0
+    ReservationRequest:
+      type: object
+      required: [roomId, checkin, checkout, guests]
+      properties:
+        roomId:
+          type: string
+          minLength: 1
+          maxLength: 120
+        hotelId:
+          type: string
+          description: Opcional; si se envía debe coincidir con el hotel de la habitación.
+        checkin:
+          type: string
+          format: date
+        checkout:
+          type: string
+          format: date
+        guests:
+          type: integer
+          minimum: 1
+          description: No puede superar la capacidad de la habitación.
+    ReservationStatus:
+      type: string
+      enum: [Pendiente, Confirmada, Rechazada, Cancelando, Cancelada]
+    Reservation:
+      type: object
+      required: [id, user_id, hotel_id, room_id, hotel, room, checkin, checkout, guests, total, status, created]
+      properties:
+        id:
+          type: string
+          example: HT-3F9A1C2B7D
+        user_id:
+          type: string
+        hotel_id:
+          type: string
+        room_id:
+          type: string
+        hotel:
+          type: string
+          description: Nombre del hotel guardado al reservar.
+        room:
+          type: string
+          description: Nombre del tipo de habitación guardado al reservar.
+        hotel_name:
+          type: string
+        room_name:
+          type: string
+        checkin:
+          type: string
+          format: date
+        checkout:
+          type: string
+          format: date
+        guests:
+          type: integer
+        total:
+          type: integer
+          description: Tarifa por noche × noches, calculada en el servidor.
+        status:
+          $ref: '#/components/schemas/ReservationStatus'
+        created:
+          type: number
+          description: Segundos Unix.
+    ReservationResponse:
+      type: object
+      required: [reservation]
+      properties:
+        reservation:
+          $ref: '#/components/schemas/Reservation'
+    CancelResponse:
+      type: object
+      required: [ok, status]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        status:
+          $ref: '#/components/schemas/ReservationStatus'
+    Notification:
+      type: object
+      required: [id, recipient, subject, body, status, created]
+      properties:
+        id:
+          type: string
+          example: confirmed:HT-3F9A1C2B7D
+        recipient:
+          type: string
+          format: email
+        subject:
+          type: string
+        body:
+          type: string
+          description: Texto plano del correo.
+        status:
+          type: string
+          enum: [vista_previa, pendiente, reintentando, aceptado_smtp, error]
+        created:
+          type: number
+          description: Segundos Unix.
