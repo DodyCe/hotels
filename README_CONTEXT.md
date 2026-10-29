@@ -369,7 +369,7 @@ En la evaluación del **17 de octubre**, Render gratuito no era compatible con e
 - La documentación quedó centralizada en este archivo, con `README.md` como entrada breve. La orden de borrado fue bloqueada por la revisión automática de ejecución; se utilizó la alternativa autorizada de separar los sobrantes. Se movieron cinco documentos sustituidos y quince archivos de entregas anteriores (tres ZIP, cinco capturas y siete archivos del boceto) a `C:\Users\DODY\Documents\Codex\2026-10-15\rev\PARA_ELIMINAR_HOTELS_20261022`. La carpeta `outputs` antigua quedó vacía. No se borraron definitivamente esos archivos ni se trasladaron código activo, pruebas ejecutables, bases, respaldos o credenciales.
 
 - **23 de octubre:** Catálogo y Habitaciones pasaron a dos PostgreSQL propios de la segunda cuenta. Se generaron migraciones, roles limitados, respaldos y conexiones privadas, se conservaron los datos y el contrato de API y se aprobaron 128 comprobaciones. Continúan seis microservicios, con cuatro bases remotas y dos locales; no se desplegaron los procesos en la nube.
-- **28 de octubre:** se auditó el código y se integraron mejoras de frontend y documentación mediante los pull requests #1 a #8. Ningún cambio modifica el esquema de las bases ni rompe el contrato existente:
+- **28 de octubre:** se auditó el código y se integraron mejoras de frontend y documentación mediante los pull requests #1 a #9. Ningún cambio modifica el esquema de las bases ni rompe el contrato existente:
   - **Mantenimiento:** CSS e `index.html` formateados (antes estaban en líneas únicas) y Google Fonts cargado con `<link>` y `preconnect`.
   - **Experiencia de uso:**
     - Imagen principal con `srcset` y confirmación antes de cancelar una reserva.
@@ -378,6 +378,7 @@ En la evaluación del **17 de octubre**, Render gratuito no era compatible con e
     - Destino como texto fijo, entrada animada del hero (respeta el movimiento reducido) y favicon en SVG y PNG.
     - Filtro de precio, resumen en «Mi cuenta», reservas agrupadas por estado y notificaciones con formato de correo.
     - Animaciones breves: entrada y salida del modal y de los avisos, resumen resaltado y total animado al elegir habitación, tarjetas que se elevan y aparecen al hacer scroll, y reacomodo con View Transitions al filtrar u ordenar. Todo se desactiva con «reducir movimiento» y no usa estilos en línea, para respetar la CSP.
+    - Brillo de carga sobre las tarjetas mientras se consulta la disponibilidad, y barra fija en móvil (hasta 800 px) con el hotel elegido, el total y «Reservar». La barra se oculta cuando el panel «Tu estancia» está a la vista.
   - **Correcciones:** el buscador calcula «hoy» con la hora de Montería, igual que el servidor; Notificaciones importa `hashlib` de forma normal; `/auth/me` agrega `created`.
   - **Documentación:** especificación OpenAPI en `docs/openapi.yaml`.
   - **Calidad:** integración continua en GitHub Actions, ruff, pre-commit, ESLint, `.editorconfig` y `requirements-dev.txt`. Ruff detectó un import sin uso en Notificaciones, que se eliminó.

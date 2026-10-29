@@ -1126,9 +1126,33 @@ footer {
 }
 
 #hotel-list.loading {
-  opacity: .5;
+  opacity: .75;
   pointer-events: none;
   transition: opacity .2s;
+}
+
+#hotel-list .hotel-card {
+  position: relative;
+}
+
+#hotel-list.loading .hotel-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(100deg, transparent 25%, #ffffffb3 50%, transparent 75%) 0 0 / 220% 100%;
+  animation: hotels-shimmer 1.2s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes hotels-shimmer {
+  from {
+    background-position: 160% 0;
+  }
+
+  to {
+    background-position: -60% 0;
+  }
 }
 
 #modal-content h2:focus {
@@ -1452,5 +1476,71 @@ dialog[open]::backdrop {
   [data-reveal]:not(.is-visible) {
     opacity: 1;
     translate: none;
+  }
+}
+
+/* Barra fija de reserva en pantallas pequeñas. */
+.mobile-bar {
+  display: none;
+}
+
+@media (max-width: 800px) {
+  .mobile-bar {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 10px 10px 16px;
+    border-radius: 14px;
+    background: var(--ink);
+    color: #fff;
+    box-shadow: 0 12px 30px #0f292d40;
+    transition: translate .3s cubic-bezier(.2, .7, .2, 1), opacity .3s ease;
+  }
+
+  .mobile-bar.tucked {
+    translate: 0 140%;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .mobile-bar > div {
+    display: grid;
+    min-width: 0;
+  }
+
+  .mobile-bar-name {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 11px;
+    color: #ffffffb8;
+  }
+
+  .mobile-bar strong {
+    font-family: 'Manrope', Arial, sans-serif;
+    font-size: 17px;
+    letter-spacing: -.3px;
+  }
+
+  .mobile-bar .button {
+    flex-shrink: 0;
+    min-height: 42px;
+    padding: 10px 16px;
+    background: #fff;
+    color: var(--ink);
+  }
+
+  body:has(.mobile-bar:not([hidden]):not(.tucked)) {
+    padding-bottom: 80px;
+  }
+
+  body:has(.mobile-bar:not([hidden]):not(.tucked)) .toast {
+    bottom: 90px;
   }
 }
