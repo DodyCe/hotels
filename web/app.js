@@ -17,10 +17,21 @@ const today = hotelToday();
 $('#checkin').value = addDays(today, 7); $('#checkout').value = addDays(today, 10); $('#checkin').min = today;
 const state = { checkin: $('#checkin').value, checkout: $('#checkout').value, guests: 2, filter: 'all', sort: 'recommended', selected: hotelCatalog[0].id, availability: {}, roomChoice: {}, user: null, online: false };
 let toastTimer;
+let modalOpener = null;
 
-function toast(message) {
-  $('#toast').textContent = message; $('#toast').hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('#toast').hidden = true; }, 5500);
+function hideToast() {
+  const el = $('#toast'); clearTimeout(toastTimer);
+  if (el.hidePopover && el.matches(':popover-open')) el.hidePopover();
+  el.hidden = true;
+}
+function toast(message, type = 'info') {
+  const el = $('#toast');
+  el.className = `toast toast-${type}`; $('#toast-message').textContent = '';
+  el.hidden = false;
+  // Como popover queda en la capa superior, visible también sobre el modal abierto.
+  if (el.showPopover) { if (el.matches(':popover-open')) el.hidePopover(); el.showPopover(); }
+  requestAnimationFrame(() => { $('#toast-message').textContent = message; });
+  clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, type === 'error' ? 9000 : 5500);
 }
 async function api(path, body) {
   if (location.protocol === 'file:') throw new Error('Abre Hotels desde su dirección web para usar esta función.');
@@ -78,15 +89,30 @@ function render() {
   }
 }
 async function refreshAvailability() {
-  const [catalogData, roomsData, availabilityData] = await Promise.all([
-    api('/hotels'), api('/rooms'), api(`/availability?checkin=${state.checkin}&checkout=${state.checkout}`)
-  ]);
-  hotelCatalog = catalogData.hotels; rooms = roomsData.rooms;
-  state.availability = Object.fromEntries(availabilityData.availability.map((r) => [r.roomId,r.available]));
-  state.online = true; $('#connection-note').textContent = ''; render();
+  const list = $('#hotel-list');
+  list.classList.add('loading'); list.setAttribute('aria-busy', 'true');
+  $('#result-description').textContent = 'Actualizando disponibilidad…';
+  try {
+    const [catalogData, roomsData, availabilityData] = await Promise.all([
+      api('/hotels'), api('/rooms'), api(`/availability?checkin=${state.checkin}&checkout=${state.checkout}`)
+    ]);
+    hotelCatalog = catalogData.hotels; rooms = roomsData.rooms;
+    state.availability = Object.fromEntries(availabilityData.availability.map((r) => [r.roomId,r.available]));
+    state.online = true; $('#connection-note').textContent = '';
+  } finally {
+    list.classList.remove('loading'); list.removeAttribute('aria-busy'); render();
+  }
 }
-function openModal(html) { $('#modal-content').innerHTML = html; if (!$('#modal').open) $('#modal').showModal(); }
+function openModal(html) {
+  if (!$('#modal').open) modalOpener = document.activeElement;
+  $('#modal-content').innerHTML = html;
+  if (!$('#modal').open) $('#modal').showModal();
+  const target = $('#modal-content input, #modal-content select') || $('#modal-content h2');
+  if (target) { if (target.tagName === 'H2') target.tabIndex = -1; target.focus(); }
+}
+$('#modal').addEventListener('close', () => { if (modalOpener?.isConnected) modalOpener.focus(); modalOpener = null; });
 $('.close-modal').addEventListener('click', () => $('#modal').close());
+$('.toast-close').addEventListener('click', hideToast);
 $('#modal').addEventListener('click', (event) => {
   if (event.target !== $('#modal')) return;
   const bounds = $('#modal').getBoundingClientRect();
@@ -94,7 +120,7 @@ $('#modal').addEventListener('click', (event) => {
 });
 async function withBusy(button, action) {
   const original = button.textContent; button.disabled = true; button.textContent = 'Un momento…';
-  try { await action(); } catch (error) { const inline = $('#form-error'); if (inline) inline.textContent = error.message; else toast(error.message); }
+  try { await action(); } catch (error) { const inline = $('#form-error'); if (inline) inline.textContent = error.message; else toast(error.message, 'error'); }
   finally { if (button.isConnected) { button.disabled = false; button.textContent = original; } }
 }
 function showAuth(mode='login', continueBooking=false) {
@@ -106,7 +132,7 @@ function showAuth(mode='login', continueBooking=false) {
     event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
     await withBusy(event.target.querySelector('button[type=submit]'), async () => {
       const result = await api('/auth/' + mode, data); state.user = result.user; renderAccount();
-      if (continueBooking && state.selected) showBooking(); else { $('#modal').close(); toast(register ? 'Cuenta creada. Ya puedes gestionar tus reservas.' : 'Sesión iniciada.'); }
+      if (continueBooking && state.selected) showBooking(); else { $('#modal').close(); toast(register ? 'Cuenta creada. Ya puedes gestionar tus reservas.' : 'Sesión iniciada.', 'success'); }
     });
   });
 }
@@ -151,7 +177,7 @@ function confirmCancel(r) {
   $('#confirm-cancel').addEventListener('click', (event) => withBusy(event.currentTarget, async () => {
     const result = await api(`/reservations/${encodeURIComponent(r.id)}/cancel`, {});
     try { await refreshAvailability(); } catch { /* La cancelación se conserva y será reconciliada. */ }
-    await showReservations(); toast(result.status === 'Cancelando' ? 'Cancelación en proceso. Actualiza tus reservas para consultar el resultado.' : 'Reserva cancelada. Estamos preparando el aviso para tu correo.');
+    await showReservations(); toast(result.status === 'Cancelando' ? 'Cancelación en proceso. Actualiza tus reservas para consultar el resultado.' : 'Reserva cancelada. Estamos preparando el aviso para tu correo.', result.status === 'Cancelando' ? 'info' : 'success');
   }));
 }
 async function showNotifications() {
@@ -174,10 +200,10 @@ $('#sort').addEventListener('change', (event) => { state.sort = event.target.val
 $('#search-form').addEventListener('submit', async (event) => {
   event.preventDefault(); const a = $('#checkin').value, b = $('#checkout').value;
   const length = (Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000;
-  if (a < hotelToday() ||!Number.isFinite(length) || length < 1 || length > 30) { $('#search-error').textContent = 'Selecciona una estancia de 1 a 30 noches, con llegada desde hoy.'; $('#search-error').hidden = false; return; }
+  if (a < hotelToday() || !Number.isFinite(length) || length < 1 || length > 30) { $('#search-error').textContent = 'Selecciona una estancia de 1 a 30 noches, con llegada desde hoy.'; $('#search-error').hidden = false; return; }
   $('#search-error').hidden = true;
   Object.assign(state,{checkin:a,checkout:b,guests:Number($('#guests').value)});
-  if (state.online) { try { await refreshAvailability(); } catch (error) { toast(error.message); } } else render();
+  if (state.online) { try { await refreshAvailability(); } catch (error) { toast(error.message, 'error'); } } else render();
   $('#hoteles').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
 });
 $('#checkin').addEventListener('change', () => { if (Number.isNaN(new Date($('#checkin').value+'T12:00:00').getTime())) return; $('#checkout').min = addDays($('#checkin').value, 1); });
