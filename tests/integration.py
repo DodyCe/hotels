@@ -210,7 +210,7 @@ def main():
     for port in (18080,*PORTS):
         with socket.socket() as probe:
             try: probe.bind(('127.0.0.1',port))
-            except OSError: raise SystemExit('Puerto de pruebas ocupado: '+str(port))
+            except OSError: raise SystemExit('Puerto de pruebas ocupado: '+str(port)) from None
     with tempfile.TemporaryDirectory(prefix='hotels-tests-') as temp:
         # Fixture con el esquema anterior, sin leer ni alterar los datos del usuario.
         with closing(sqlite3.connect(Path(temp)/'reservations.sqlite3')) as db:

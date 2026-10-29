@@ -8,3 +8,4 @@ __pycache__
 .git
 .env.*
 !.env.example
+node_modules
