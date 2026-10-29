@@ -7,10 +7,14 @@ const money = (value) => new Intl.NumberFormat('es-CO', { style: 'currency', cur
 const dateText = (value) => new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value + 'T12:00:00'));
 const escapeHTML = (value) => String(value).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localISO = (date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
-const today = new Date();
-const arrival = new Date(today); arrival.setDate(arrival.getDate()+7);
-const departure = new Date(arrival); departure.setDate(departure.getDate()+3);
-$('#checkin').value = localISO(arrival); $('#checkout').value = localISO(departure); $('#checkin').min = localISO(today);
+// Mismo calendario que el servidor (common.validate_dates): hora de Montería, sin importar la zona del visitante.
+const hotelToday = () => {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map((p) => [p.type, p.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+const addDays = (iso, days) => { const date = new Date(iso + 'T12:00:00'); date.setDate(date.getDate() + days); return localISO(date); };
+const today = hotelToday();
+$('#checkin').value = addDays(today, 7); $('#checkout').value = addDays(today, 10); $('#checkin').min = today;
 const state = { checkin: $('#checkin').value, checkout: $('#checkout').value, guests: 2, filter: 'all', sort: 'recommended', selected: hotelCatalog[0].id, availability: {}, roomChoice: {}, user: null, online: false };
 let toastTimer;
 
@@ -164,14 +168,14 @@ $('#sort').addEventListener('change', (event) => { state.sort = event.target.val
 $('#search-form').addEventListener('submit', async (event) => {
   event.preventDefault(); const a = $('#checkin').value, b = $('#checkout').value;
   const length = (Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000;
-  if (a < localISO(today) || !Number.isFinite(length) || length < 1 || length > 30) { $('#search-error').textContent = 'Selecciona una estancia de 1 a 30 noches, con llegada desde hoy.'; $('#search-error').hidden = false; return; }
+  if (a < hotelToday() ||!Number.isFinite(length) || length < 1 || length > 30) { $('#search-error').textContent = 'Selecciona una estancia de 1 a 30 noches, con llegada desde hoy.'; $('#search-error').hidden = false; return; }
   $('#search-error').hidden = true;
   Object.assign(state,{checkin:a,checkout:b,guests:Number($('#guests').value)});
   if (state.online) { try { await refreshAvailability(); } catch (error) { toast(error.message); } } else render();
   $('#hoteles').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
 });
-$('#checkin').addEventListener('change', () => { const date = new Date($('#checkin').value+'T12:00:00'); if (Number.isNaN(date.getTime())) return; date.setDate(date.getDate()+1); $('#checkout').min = localISO(date); });
-$('#checkout').min = localISO(new Date(arrival.getTime()+86400000));
+$('#checkin').addEventListener('change', () => { if (Number.isNaN(new Date($('#checkin').value+'T12:00:00').getTime())) return; $('#checkout').min = addDays($('#checkin').value, 1); });
+$('#checkout').min = addDays($('#checkin').value, 1);
 $('#reserve-button').addEventListener('click', showBooking);
 $('#my-reservations').addEventListener('click', showReservations);
 $('#notifications-button').addEventListener('click', showNotifications);
