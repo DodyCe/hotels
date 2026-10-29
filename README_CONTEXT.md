@@ -1,6 +1,6 @@
 # Hotels — contexto completo del proyecto
 
-Actualizado el **23 de octubre de 2026**. Este es el documento central de contexto, funcionamiento, herramientas, decisiones, verificación e historial de Hotels. Reúne la información antes distribuida en `HISTORIAL_PROYECTO.md`, `DECISIONES_TECNICAS.md`, `PRUEBAS.md`, `SUPABASE.md` y `FUENTES.md`.
+Actualizado el **28 de octubre de 2026**. Este es el documento central de contexto, funcionamiento, herramientas, decisiones, verificación e historial de Hotels. Reúne la información antes distribuida en `HISTORIAL_PROYECTO.md`, `DECISIONES_TECNICAS.md`, `PRUEBAS.md`, `SUPABASE.md` y `FUENTES.md`.
 
 Los resultados de ejecución que se citan conservan sus fechas. Tener código escrito, un proveedor configurado o un commit publicado no significa haber completado un despliegue público ni todos los entregables.
 
@@ -41,6 +41,7 @@ hotels/
   migrations/               SQL de Auth, Notificaciones, Catálogo y Habitaciones
   tools/                    Comprobación SMTP y migración de datos
   tests/                    Pruebas ejecutables del proyecto
+  docs/openapi.yaml         Especificación OpenAPI 3.1 de la API pública
   data/                     Bases SQLite, clave interna y respaldos privados
 ```
 
@@ -54,7 +55,7 @@ hotels/
 - **Persistencia:** cuatro proyectos PostgreSQL independientes en Supabase y dos bases SQLite activas, una por servicio restante. JSON se usa para las semillas y los mensajes de API.
 - **Correo:** Gmail SMTP configurable, TLS y contraseña de aplicación de una cuenta dedicada a Hotels. El correo lo envía Notificaciones; Supabase almacena datos.
 - **Contenedores:** `Dockerfile` basado en `python:3.12-slim` y Docker Compose con un componente por proceso. Se escribieron las definiciones; su ejecución sigue pendiente de validación.
-- **Control de versiones:** Git y el repositorio público [DodyCe/hotels](https://github.com/DodyCe/hotels). Se utilizó la CLI para revisar cambios, crear commits, subirlos y comparar el HEAD local/remoto.
+- **Control de versiones:** Git y el repositorio público [DodyCe/hotels](https://github.com/DodyCe/hotels). Se utilizó la CLI para revisar cambios, crear commits, subirlos y comparar el HEAD local/remoto. Desde el 28 de octubre los cambios se trabajan en ramas por tema y entran a `main` mediante pull requests, creados y fusionados con GitHub CLI (`gh`).
 - **Entorno de desarrollo:** Windows, PowerShell, entorno Python `.venv` y Codex para edición, inspección, ejecución de comandos, revisión en navegador y consulta de documentación. Se utilizó el Python incluido en el entorno de Codex cuando correspondía.
 - **Node.js:** se utilizó `node --check web/app.js` para comprobar sintaxis; no es el servidor de esta aplicación ni implica un backend Node/Express.
 - **Revisión de la guía y evidencias:** Microsoft Word para exportar la guía de DOCX a PDF; herramientas Python y capturas de navegador para revisar texto, páginas y comportamiento. Esos archivos de trabajo no son dependencias de ejecución de Hotels.
@@ -264,7 +265,7 @@ Todas las rutas usan JSON. El Gateway elimina `/api` al reenviar la solicitud:
 
 Estados relevantes: 202 pendiente, 400 datos inválidos, 401 sin sesión, 403 acceso no permitido, 404 recurso inexistente o ajeno, 409 conflicto, 429 exceso de intentos y 503 servicio no disponible. Los ejemplos de identificador incluyen `ghl-monteria-principal` y `ghl-monteria-alternativa`.
 
-Esta lista no sustituye Swagger/OpenAPI. Catálogo y Habitaciones exponen consultas; no se implementó administración con permisos de edición ni un panel administrativo completo.
+El contrato completo, con esquemas, parámetros, validaciones y códigos por ruta, está en [`docs/openapi.yaml`](docs/openapi.yaml) (OpenAPI 3.1). Puede abrirse en cualquier visor OpenAPI, por ejemplo el editor de Swagger. La web no sirve una interfaz Swagger: la CSP del Gateway solo permite scripts propios. `/auth/me` incluye `created`, la fecha de alta en segundos Unix. Catálogo y Habitaciones exponen consultas; no se implementó administración con permisos de edición ni un panel administrativo completo.
 
 ## 13. Pruebas y evidencia conservada
 
@@ -310,6 +311,13 @@ Para exigir las cuatro conexiones al repetir la integración:
 .\.venv\Scripts\python.exe tests/integration.py --four-postgres
 ```
 
+### Verificación del 28 de octubre
+
+- `tests/integration.py` en modo SQLite temporal, después de cada fusión: 57 de 57 comprobaciones aprobadas. `tests/migration.py`: 5 de 5.
+- `tests/database_config.py` no se pudo completar en el equipo de esa sesión porque no tenía `psycopg` instalado. Falla la prueba que exige el driver; no se debe a los cambios.
+- El frontend se revisó en navegador con la API simulada, a 390, 1024 y 1440 px. El reformateo de CSS/HTML conservó las 250 reglas CSS y la posición y los estilos calculados de los 260 elementos de la página.
+- No se ejecutó la modalidad PostgreSQL ni `INICIAR.cmd` con los seis servicios, porque no había `.env` en ese equipo. Antes de entregar, conviene repetir `tests/integration.py --four-postgres` y revisar el flujo completo con las bases reales.
+
 ## 14. Docker y alojamiento futuro
 
 Se incluyen siete componentes en Compose: Gateway y seis servicios. Solo el Gateway publica un puerto al anfitrión; las SQLite usan volúmenes separados. Las conexiones PostgreSQL y SMTP se asignan únicamente a sus servicios correspondientes. La imagen ejecuta con un usuario sin privilegios.
@@ -333,6 +341,16 @@ En la evaluación del **17 de octubre**, Render gratuito no era compatible con e
 - La documentación quedó centralizada en este archivo, con `README.md` como entrada breve. La orden de borrado fue bloqueada por la revisión automática de ejecución; se utilizó la alternativa autorizada de separar los sobrantes. Se movieron cinco documentos sustituidos y quince archivos de entregas anteriores (tres ZIP, cinco capturas y siete archivos del boceto) a `C:\Users\DODY\Documents\Codex\2026-10-15\rev\PARA_ELIMINAR_HOTELS_20261022`. La carpeta `outputs` antigua quedó vacía. No se borraron definitivamente esos archivos ni se trasladaron código activo, pruebas ejecutables, bases, respaldos o credenciales.
 
 - **23 de octubre:** Catálogo y Habitaciones pasaron a dos PostgreSQL propios de la segunda cuenta. Se generaron migraciones, roles limitados, respaldos y conexiones privadas, se conservaron los datos y el contrato de API y se aprobaron 128 comprobaciones. Continúan seis microservicios, con cuatro bases remotas y dos locales; no se desplegaron los procesos en la nube.
+- **28 de octubre:** se auditó el código y se integraron mejoras de frontend y documentación mediante los pull requests #1 a #6. Ningún cambio modifica el esquema de las bases ni rompe el contrato existente:
+  - **Mantenimiento:** CSS e `index.html` formateados (antes estaban en líneas únicas) y Google Fonts cargado con `<link>` y `preconnect`.
+  - **Experiencia de uso:**
+    - Imagen principal con `srcset` y confirmación antes de cancelar una reserva.
+    - Foco gestionado en los modales y estado de carga de la disponibilidad.
+    - Avisos por tipo que se ven sobre el modal.
+    - Destino como texto fijo, entrada animada del hero (respeta el movimiento reducido) y favicon en SVG y PNG.
+    - Filtro de precio, resumen en «Mi cuenta», reservas agrupadas por estado y notificaciones con formato de correo.
+  - **Correcciones:** el buscador calcula «hoy» con la hora de Montería, igual que el servidor; Notificaciones importa `hashlib` de forma normal; `/auth/me` agrega `created`.
+  - **Documentación:** especificación OpenAPI en `docs/openapi.yaml`.
 
 Commits publicados y comprobados el 17 de octubre en `main`:
 
@@ -349,9 +367,9 @@ La sección final de entregables pide: código fuente; repositorio e historial G
 
 Este documento reúne contexto y material útil para varios de ellos; **no completa automáticamente la entrega formal**. Falta:
 
-1. Terminar/revisar frontend, validaciones, estados vacíos y de error y presentación en escritorio/móvil.
+1. Revisar el frontend con los servicios y las bases reales. El 28 de octubre se mejoraron estados de carga, errores, foco y presentación en escritorio y móvil, pero se probaron con la API simulada.
 2. Revisar el alcance de administración de hoteles, habitaciones y huéspedes respecto de la guía; las consultas actuales no son un CRUD administrativo completo.
-3. Elaborar Swagger/OpenAPI y modelos de datos formales por servicio.
+3. Elaborar los modelos de datos formales por servicio. La especificación OpenAPI ya está en `docs/openapi.yaml`.
 4. Preparar los dos diagramas solicitados y el documento final con decisiones, seguridad y comunicación asíncrona justificadas.
 5. Ejecutar y verificar Docker Compose y reproducibilidad en otra instalación.
 6. Capturar evidencias actuales y correo recibido, completar manual, presentación y demostración integral.
