@@ -26,11 +26,14 @@ def password_hash(password, salt):
     return hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=32768, r=8, p=1, maxmem=64*1024*1024, dklen=32).hex()
 
 def public_user(row):
-    return {key: row[key] for key in ('id', 'name', 'email')}
+    user = {key: row[key] for key in ('id', 'name', 'email')}
+    if 'created' in row.keys():
+        user['created'] = row['created']
+    return user
 
 def current_user(handler):
     with connect('auth') as db:
-        row = db.execute('SELECT u.id,u.name,u.email FROM users u JOIN sessions s ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>?', (session_hash(handler), time.time())).fetchone()
+        row = db.execute('SELECT u.id,u.name,u.email,u.created FROM users u JOIN sessions s ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>?', (session_hash(handler), time.time())).fetchone()
     if not row:
         raise APIError(401, 'Inicia sesión para continuar.')
     return public_user(row)
