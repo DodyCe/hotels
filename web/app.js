@@ -179,11 +179,35 @@ function showAuth(mode='login', continueBooking=false) {
   openModal(`<p class="eyebrow">TU CUENTA EN HOTELS</p><h2>${register ? 'Crea tu cuenta' : 'Qué bueno verte'}</h2><p>Gestiona tus reservas y recibe las confirmaciones en el correo de tu cuenta.</p><div class="auth-tabs"><button class="${!register ? 'active' : ''}" id="login-tab">Ingresar</button><button class="${register ? 'active' : ''}" id="register-tab">Registrarse</button></div><form id="auth-form">${register ? '<label>Nombre completo<input name="name" autocomplete="name" minlength="2" maxlength="80" required placeholder="Tu nombre completo"></label>' : ''}<label>Correo electrónico<input name="email" type="email" autocomplete="email" maxlength="254" required placeholder="nombre@ejemplo.com"></label><label>Contraseña<input name="password" type="password" autocomplete="${register ? 'new-password' : 'current-password'}" minlength="10" maxlength="128" required placeholder="Mínimo 10 caracteres"></label><p class="form-error" id="form-error" role="alert"></p><button class="button primary" type="submit">${register ? 'Crear cuenta' : 'Ingresar'}</button></form><p class="modal-hint">Recibirás los avisos de tu cuenta y tus reservas en este correo. Usa una contraseña exclusiva para Hotels.</p>`);
   $('#login-tab').addEventListener('click', () => showAuth('login', continueBooking));
   $('#register-tab').addEventListener('click', () => showAuth('register', continueBooking));
+  if (!register) {
+    const recovery = document.createElement('button');
+    recovery.type = 'button'; recovery.className = 'button secondary'; recovery.textContent = 'Olvidé mi contraseña';
+    recovery.addEventListener('click', () => showRecovery(continueBooking, $('#auth-form [name=email]').value));
+    $('#auth-form').after(recovery);
+    const hint = document.createElement('p'); hint.className = 'modal-hint';
+    hint.textContent = 'Tras 6 contraseñas incorrectas, el acceso a ese correo se bloquea durante 15 minutos. Puedes recuperar tu contraseña durante el bloqueo.';
+    recovery.after(hint);
+    $('#auth-form [name=password]').minLength = 1;
+    $('#auth-form [name=password]').placeholder = 'Tu contraseña de Hotels';
+  }
+  $('#auth-form [name=email]').addEventListener('input', () => { $('#form-error').textContent = ''; });
   $('#auth-form').addEventListener('submit', async (event) => {
     event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
     await withBusy(event.target.querySelector('button[type=submit]'), async () => {
       const result = await api('/auth/' + mode, data); state.user = result.user; renderAccount();
       if (continueBooking && state.selected) showBooking(); else { $('#modal').close(); toast(register ? 'Cuenta creada. Ya puedes gestionar tus reservas.' : 'Sesión iniciada.', 'success'); }
+    });
+  });
+}
+
+function showRecovery(continueBooking=false, email='') {
+  openModal(`<p class="eyebrow">RECUPERA TU CUENTA</p><h2>Volvamos a encontrarnos.</h2><p>Te enviaremos un enlace para elegir una nueva contraseña. Vence en 15 minutos y solo puedes usarlo una vez.</p><form id="recovery-form"><label>Correo electrónico<input name="email" type="email" autocomplete="email" maxlength="254" required placeholder="nombre@ejemplo.com" value="${escapeHTML(email)}"></label><p class="form-error" id="form-error" role="alert"></p><button class="button primary" type="submit">Enviar enlace de recuperación</button></form><p class="modal-hint" id="recovery-result" role="status"></p><button class="button secondary" id="back-to-login">Volver a ingresar</button>`);
+  $('#back-to-login').addEventListener('click', () => showAuth('login',continueBooking));
+  $('#recovery-form').addEventListener('submit', async (event) => {
+    event.preventDefault(); $('#form-error').textContent = '';
+    await withBusy(event.target.querySelector('button'), async () => {
+      const result = await api('/auth/forgot-password',Object.fromEntries(new FormData(event.target)));
+      $('#recovery-result').textContent = result.message;
     });
   });
 }

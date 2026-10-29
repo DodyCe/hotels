@@ -66,7 +66,7 @@ paths:
       tags:
       - Autenticación
       summary: Iniciar sesión
-      description: Valida la contraseña (scrypt) y rota la sesión presentada.
+      description: Valida la contraseña (scrypt) y rota la sesión presentada. Los fallos se cuentan por correo en la base de Auth. Se permiten seis fallos dentro de 15 minutos; el sexto bloquea el acceso durante 15 minutos. Los fallos informan attemptsRemaining y el bloqueo incluye lockedUntil y retryAfterSeconds. Un inicio correcto o una recuperación válida reinicia el contador.
       operationId: login
       requestBody:
         required: true
@@ -87,13 +87,67 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
-          description: Correo o contraseña incorrectos.
+          description: Correo o contraseña incorrectos; informa los intentos restantes.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /auth/forgot-password:
+    post:
+      tags: [Autenticación]
+      summary: Solicitar un enlace de recuperación por correo
+      operationId: forgotPassword
+      description: Respuesta uniforme para cuentas activas e inexistentes. No devuelve el token ni muestra el enlace en la bandeja web. Un envío por correo cada 60 segundos y hasta tres solicitudes por minuto por IP. Cada enlace vence en 15 minutos; un envío nuevo reemplaza al anterior.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: {type: string, format: email, maxLength: 254}
+      responses:
+        '202':
+          description: Solicitud recibida, sin revelar si la cuenta existe.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityMessage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /auth/reset-password:
+    post:
+      tags: [Autenticación]
+      summary: Restablecer la contraseña con un enlace de un solo uso
+      operationId: resetPassword
+      description: El token llega por correo en el fragmento del enlace y se envía en el cuerpo JSON. Cambia sal y hash scrypt, consume el token, revoca todas las sesiones de esa cuenta y elimina su bloqueo temporal. No inicia sesión automáticamente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, password, confirmPassword]
+              properties:
+                token: {type: string, pattern: '^[A-Za-z0-9_-]{43}$', writeOnly: true}
+                password: {type: string, minLength: 10, maxLength: 128, writeOnly: true}
+                confirmPassword: {type: string, minLength: 10, maxLength: 128, writeOnly: true}
+      responses:
+        '200':
+          description: Contraseña actualizada y sesiones anteriores revocadas.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityMessage'}
+        '400':
+          description: Contraseñas inválidas o distintas; enlace inválido, vencido o consumido.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
   /auth/me:
     get:
       tags:
@@ -1181,6 +1235,11 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
   schemas:
+    SecurityMessage:
+      type: object
+      required: [message]
+      properties:
+        message: {type: string}
     Error:
       type: object
       required:
@@ -1188,6 +1247,16 @@ components:
       properties:
         error:
           type: string
+        attemptsRemaining:
+          type: integer
+          minimum: 0
+          maximum: 5
+        lockedUntil:
+          type: [number, 'null']
+          description: Fecha Unix de fin del bloqueo, o null antes del sexto fallo.
+        retryAfterSeconds:
+          type: integer
+          minimum: 0
       example:
         error: Selecciona fechas AAAA-MM-DD desde hoy, con una estancia de 1 a 30 noches.
     Ok:
@@ -1233,7 +1302,7 @@ components:
           maxLength: 254
         password:
           type: string
-          minLength: 10
+          minLength: 1
           maxLength: 128
       additionalProperties: false
     User:

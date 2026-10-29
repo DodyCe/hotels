@@ -2,10 +2,12 @@
 import http.cookiejar
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -67,6 +69,21 @@ def main():
             check('/internal/allocate' in request(admin,'/openapi-internal.json')[1]['paths'],'Contrato interno disponible en Docker')
             with urllib.request.urlopen(base+'/vendor/swagger-ui-bundle.js',timeout=15) as response:
                 check(response.status==200 and response.headers.get('Content-Encoding')=='gzip','Swagger UI se sirve desde la propia imagen Docker')
+            uid=request(admin,'/api/auth/me')[1]['user']['id']
+            check(request(admin,'/api/auth/forgot-password',{'email':email})[0]==202,'Recuperación disponible entre contenedores')
+            token='';deadline=time.monotonic()+25
+            while time.monotonic()<deadline and not token:
+                code=("import re,sqlite3\nwith sqlite3.connect('file:/data/notifications.sqlite3?mode=ro',uri=True) as db:\n"
+                      " row=db.execute(\"SELECT body FROM messages WHERE user_id=? AND id LIKE ? ORDER BY created DESC LIMIT 1\",("+repr(uid)+",'password-reset:%')).fetchone()\n"
+                      " match=re.search(r'#token=([A-Za-z0-9_-]{43})',row[0]) if row else None\n print(match.group(1) if match else '')")
+                token=compose('exec','-T','notifications','python','-c',code).strip()
+                if not token:time.sleep(.2)
+            check(bool(re.fullmatch(r'[A-Za-z0-9_-]{43}',token)),'Auth entrega el enlace privado a Notificaciones en Docker')
+            check(not any(n['id'].startswith('password-reset:') for n in request(admin,'/api/notifications')[1]['notifications']),'El correo de recuperación queda fuera de la bandeja web en Docker')
+            new_password=secrets.token_urlsafe(24)
+            reset={'token':token,'password':new_password,'confirmPassword':new_password}
+            check(request(admin,'/api/auth/reset-password',reset)[0]==200 and request(admin,'/api/auth/me')[0]==401,'La recuperación cambia la contraseña y revoca la sesión en Docker')
+            check(request(admin,'/api/auth/login',{'email':email,'password':new_password})[0]==200 and request(admin,'/api/auth/reset-password',reset)[0]==400,'La nueva contraseña funciona y el enlace no se reutiliza en Docker')
             print(json.dumps({'passed':len(checks),'checks':checks},ensure_ascii=True,indent=2))
         except Exception:
             print(compose('logs','--tail','60'))

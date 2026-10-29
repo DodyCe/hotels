@@ -108,15 +108,25 @@ def enqueue(db, event):
 
 def start_outbox(name):
     def worker():
+        last_cleanup = 0
         while True:
             try:
                 with connect(name) as db:
+                    if name == 'auth' and time.time()-last_cleanup >= 60:
+                        from account_security import cleanup_expired
+                        cleanup_expired(db)
+                        last_cleanup = time.time()
                     rows = db.execute('SELECT * FROM outbox WHERE delivered=0 AND next_try<=? ORDER BY next_try,id LIMIT 10', (time.time(),)).fetchall()
                 for row in rows:
                     try:
-                        internal_request(NOTIFICATIONS, '/internal/events', json.loads(row['body']))
+                        event = json.loads(row['body'])
+                        expired = name == 'auth' and row['id'].startswith('password-reset:') and event['payload']['expiresAt']<=time.time()
+                        if not expired:
+                            internal_request(NOTIFICATIONS, '/internal/events', event)
                         with connect(name) as db:
                             db.execute('UPDATE outbox SET delivered=1 WHERE id=?', (row['id'],))
+                            if name == 'auth' and row['id'].startswith('password-reset:'):
+                                db.execute("UPDATE outbox SET body='{}' WHERE id=?", (row['id'],))
                     except APIError:
                         with connect(name) as db:
                             db.execute('UPDATE outbox SET attempts=attempts+1,next_try=? WHERE id=?', (time.time() + min(60, 2 ** min(row['attempts'] + 1, 6)), row['id']))

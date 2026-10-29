@@ -27,7 +27,9 @@ class Gateway(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('X-Frame-Options', 'DENY')
-        self.send_header('Referrer-Policy', 'strict-origin-when-cross-origin')
+        self.send_header('Referrer-Policy', 'no-referrer' if urlsplit(self.path).path == '/reset-password.html' else 'strict-origin-when-cross-origin')
+        if urlsplit(self.path).path == '/reset-password.html':
+            self.send_header('Cache-Control','no-store')
         self.send_header('Content-Security-Policy', "default-src 'self'; img-src 'self' https://images.unsplash.com data:; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
         super().end_headers()
 
@@ -115,6 +117,8 @@ class Gateway(SimpleHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-store')
             for cookie in response.headers.get_all('Set-Cookie', []):
                 self.send_header('Set-Cookie', cookie)
+            if response.headers.get('Retry-After'):
+                self.send_header('Retry-After',response.headers['Retry-After'])
             self.end_headers(); self.wfile.write(body)
 
     do_GET = handle_route

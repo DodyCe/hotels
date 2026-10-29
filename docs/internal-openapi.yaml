@@ -404,6 +404,8 @@ paths:
                   - welcome
                   - reservation.confirmed
                   - reservation.cancelled
+                  - password.reset
+                  - password.changed
                 payload:
                   type: object
               required:

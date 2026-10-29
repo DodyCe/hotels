@@ -4,6 +4,28 @@ Actualizado el **29 de octubre de 2026**. Este es el documento central de contex
 
 Los resultados de ejecución que se citan conservan sus fechas. Tener código escrito, un proveedor configurado o un commit publicado no significa haber completado un despliegue público ni todos los entregables.
 
+### Recuperación de contraseña y bloqueo por correo — 29 de octubre de 2026
+
+El usuario pidió añadir recuperación y bloquear el acceso después de seis contraseñas incorrectas, mostrando los intentos restantes. Se mantienen seis microservicios: Autenticación es responsable del estado de seguridad y Notificaciones entrega los correos por SMTP. La prioridad acordada es terminar esta funcionalidad antes de discutir el despliegue y organizar la entrega formal.
+
+La nueva versión se desarrolla en `codex/recuperacion-bloqueo-cuentas`. El contador usa el correo normalizado, guardado como SHA-256 en `hotels_auth.login_security`; no depende del navegador ni exclusivamente de la IP. Se permiten seis fallos dentro de una ventana de 15 minutos y el sexto bloquea nuevos accesos por contraseña durante 15 minutos. Los cinco primeros informan los intentos restantes; el sexto devuelve HTTP 429 con `attemptsRemaining=0`, fecha de desbloqueo y `Retry-After`. El acceso correcto reinicia el contador. El bloqueo no se extiende por repetir solicitudes ni impide recuperar la contraseña. Se mantiene el límite adicional de solicitudes por IP.
+
+El estado se serializa por correo mediante UPSERT y bloqueo de fila de PostgreSQL; SQLite utiliza `BEGIN IMMEDIATE`. Así se conserva al reiniciar y varias instancias comparten el mismo límite. Una tarea periódica elimina los contadores y tokens vencidos. Los enlaces de recuperación y contadores temporales no se reproducen al copiar respaldos SQLite, evitando reactivar enlaces consumidos.
+
+`POST /api/auth/forgot-password` responde de forma uniforme para direcciones registradas e inexistentes y limita los reenvíos a uno cada 60 segundos, además de tres solicitudes por minuto por IP. Genera un token aleatorio de 32 bytes, válido 15 minutos, cuyo hash SHA-256 se guarda en `hotels_auth.password_resets`. Un nuevo envío reemplaza el token anterior. El enlace utiliza el origen fijo `PUBLIC_ORIGIN`, con HTTPS fuera de localhost, y lleva el token en el fragmento de `/reset-password.html`, por lo que no forma parte de la ruta registrada por el servidor. La página limpia el fragmento del historial, no carga recursos externos y evita caché y Referer.
+
+`POST /api/auth/reset-password` exige token y contraseña repetida de 10 a 128 caracteres. El consumo del token, la nueva sal/hash scrypt, la revocación de todas las sesiones propias y la eliminación del bloqueo ocurren en la misma transacción. No inicia sesión automáticamente ni modifica permisos administrativos. Dos solicitudes simultáneas con el mismo enlace solo pueden completar un cambio.
+
+Los eventos `password.reset` se entregan por Notificaciones y se excluyen de la bandeja web: una sesión abierta no permite leer el enlace enviado al correo. Auth borra el enlace de su outbox después de entregarlo al servicio; Notificaciones elimina el enlace del cuerpo persistido después de la aceptación SMTP y no envía mensajes de recuperación vencidos. Mientras está en cola, el enlace permanece temporalmente en estos almacenamientos privados para poder entregarse. Un evento `password.changed` avisa después del cambio. No se modificó el esquema de Notificaciones ni se incorporaron sus credenciales en Auth.
+
+La migración `migrations/auth/20261029203309_hotels_account_recovery_lockout.sql`, generada con Supabase CLI, ya se aplicó desde la sesión web autorizada después de la confirmación del usuario. Las dos tablas tienen RLS y políticas exclusivamente para `hotels_auth_app`, sin acceso de `anon`/`authenticated`. Se respaldaron y compararon los dos usuarios originales en `data/backups/account-recovery-20261029T222939Z/auth.json`; sus contraseñas se conservaron. La configuración SMTP privada permanece intacta.
+
+Verificación: 121 comprobaciones HTTP con SQLite, 104 con los seis PostgreSQL, 11 de configuración, nueve de migración, tres de OpenAPI y tres de SMTP simulado aprobadas. Las comprobaciones nuevas cubren el límite exacto, persistencia al reiniciar, aislamiento por correo, recuperación durante el bloqueo, caducidad, doble consumo concurrente, revocación de sesiones y ausencia del enlace en la bandeja web. Las pruebas simuladas verifican TLS, descarte por vencimiento y eliminación del enlace tras el envío. Una primera ejecución PostgreSQL detectó el uso de un `%` literal en la consulta que filtra correos privados; se sustituyó por un parámetro y se corrigió la codificación de los logs de pruebas para no ocultar errores. La ejecución posterior terminó correctamente y la verificación del respaldo confirmó intactos los dos usuarios reales, sin filas de prueba en las dos tablas de seguridad. SMTP permaneció desactivado en las pruebas; no se enviaron correos reales ni se cambió la contraseña de ninguna cuenta del usuario. También se amplió la prueba de Docker con recuperación entre contenedores, privacidad del enlace, revocación y rechazo de reutilización.
+
+La interfaz se revisó en la vista aislada de 8081: mostró los intentos restantes, el bloqueo al sexto fallo y la solicitud de recuperación durante el bloqueo. La pantalla de nueva contraseña elimina el fragmento del enlace de la barra de direcciones. Las capturas están en `rev/work/hotels-bloqueo-sexto-intento.png` y `hotels-recuperacion-formulario.png`; corresponden a una cuenta ficticia de QA. No se usó esa cuenta en las bases reales.
+
+Se consultaron las guías de [recuperación de contraseña](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html) y [autenticación](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) de OWASP para justificar token aleatorio/consumible, vencimiento, mensajes uniformes, revocación y bloqueo temporal.
+
 ### Desarrollo del 29 de octubre de 2026 — administración, Docker y OpenAPI
 
 El usuario pidió terminar primero los puntos funcionales: administración, ejecución con Docker y documentación interactiva de APIs; el documento de entrega se organizará después. El trabajo se desarrolló en `codex/administracion-docker-openapi` mientras se preparaban y comprobaban las migraciones de las bases existentes, y se incorporó a `main` tras la validación remota. La aplicación normal se utiliza en el puerto 8080; la vista temporal de 8081 quedó detenida.
@@ -165,7 +187,7 @@ Este esquema ayuda a explicar el sistema. Los diagramas formales de arquitectura
 
 ## 5. Microservicios y propiedad de los datos
 
-1. **Autenticación — 8101 — `services/auth.py`.** Registra cuentas, valida contraseñas, crea/revoca sesiones, comprueba roles y administra los perfiles de huéspedes. Usa el proyecto PostgreSQL `hotels-auth`: esquema privado `hotels_auth`, tablas `users`, `guests`, `sessions` y `outbox`. Un perfil puede existir sin credenciales; su vínculo opcional con una cuenta permanece en esta misma base.
+1. **Autenticación — 8101 — `services/auth.py`.** Registra cuentas, valida contraseñas, crea/revoca sesiones, comprueba roles y administra los perfiles de huéspedes, el bloqueo por correo y la recuperación. Usa el proyecto PostgreSQL `hotels-auth`: esquema privado `hotels_auth`, tablas `users`, `guests`, `sessions`, `outbox`, `login_security` y `password_resets`. Un perfil puede existir sin credenciales; su vínculo opcional con una cuenta permanece en esta misma base.
 2. **Notificaciones — 8102 — `services/notifications.py`.** Recibe eventos, obtiene el destinatario en Auth, guarda mensajes y gestiona SMTP y reintentos. Usa otro proyecto PostgreSQL, `hotels-notifications`: esquema privado `hotels_notifications`, tabla `messages`.
 3. **Reservas — 8103 — `services/reservations.py`.** Guarda propietario, habitación, fechas, huéspedes, importe y estado de la operación, además de su outbox. Usa PostgreSQL en `hotels-reservations`, esquema privado `hotels_reservations`, tablas `reservations` y `outbox`.
 4. **Catálogo de hoteles — 8104 — `services/catalog.py`.** Guarda establecimientos, ubicación, descripciones, fuentes y créditos; la tabla `hotels` conserva documentos JSON. Usa PostgreSQL en `hotels-catalog`, esquema `hotels_catalog`, tabla `hotels`. Las habitaciones, tarifas y ocupaciones pertenecen a otros servicios.
@@ -202,7 +224,7 @@ Los proyectos Supabase tienen esquemas privados y tablas con RLS; las políticas
 
 **JWT todavía no está implementado.** El 22 de octubre se recomendó evaluarlo para el futuro despliegue distribuido: Auth firmaría con clave privada y los consumidores validarían con clave pública, comprobando firma, emisor, destinatario y vencimiento. Se necesitarían tokens de acceso cortos, renovación y revocación controladas, además de autorización en cada servicio. Esa conversación no fue una orden de sustituir las sesiones ni una implementación terminada.
 
-Tampoco están implementadas la confirmación de titularidad del correo mediante un token, recuperación de contraseña, MFA ni todos los controles de una plataforma pública. El correo de bienvenida no verifica la propiedad de la dirección. HTTPS y cookies seguras deben configurarse y comprobarse al desplegar. JWT firmado no equivale a cifrar sus datos; nunca debe contener contraseñas.
+La recuperación de contraseña y el bloqueo temporal ya están implementados, como se detalla al comienzo. Siguen pendientes la confirmación de titularidad del correo en el registro, MFA y otros controles de una plataforma pública. El correo de bienvenida no verifica la propiedad de la dirección. HTTPS, cookies seguras y `PUBLIC_ORIGIN` deben configurarse y comprobarse al desplegar. JWT firmado no equivale a cifrar sus datos; nunca debe contener contraseñas.
 
 `.env`, bases, respaldos, `.venv`, claves internas, caches y logs están excluidos de Git. No pegar contraseñas de Gmail o PostgreSQL, tokens ni cookies en este documento, el chat, capturas públicas o commits. No sobrescribir el `.env` actual con la plantilla.
 
@@ -336,6 +358,7 @@ Las rutas de API usan JSON. El Gateway elimina `/api` al reenviar la solicitud:
 - `GET /api/availability?checkin=AAAA-MM-DD&checkout=AAAA-MM-DD`: disponibilidad por rango.
 - `POST /api/auth/register`: `{name,email,password}`; cuenta, sesión y evento de bienvenida.
 - `POST /api/auth/login`: `{email,password}`; `GET /api/auth/me`: perfil; `POST /api/auth/logout`: revocación.
+- `POST /api/auth/forgot-password`: `{email}`; respuesta uniforme y envío privado de recuperación. `POST /api/auth/reset-password`: `{token,password,confirmPassword}`; cambio, consumo del enlace, desbloqueo y revocación de sesiones.
 - `POST /api/reservations`: `{roomId,checkin,checkout,guests}`; `hotelId` opcional debe coincidir con la habitación. Precio y propietario proceden del servidor.
 - `GET /api/reservations`: reservas propias; `POST /api/reservations/{id}/cancel`: cancelación propia.
 - `GET /api/notifications`: mensajes y estados propios.
@@ -495,7 +518,7 @@ Este documento reúne contexto y material útil para varios de ellos; **no compl
 4. Preparar los dos diagramas solicitados y el documento final con decisiones, seguridad y comunicación asíncrona justificadas.
 5. Incorporar la ejecución Docker Compose ya aprobada en CI a las evidencias y al manual de instalación.
 6. Capturar evidencias actuales y correo recibido, completar manual, presentación y demostración integral.
-7. Implementar, cuando se autorice, confirmación de correo y recuperación de contraseña; evaluar JWT antes de modificar la autenticación.
+7. La recuperación ya está implementada. La confirmación de correo en el registro y una posible migración a JWT quedan como evolución posterior, no como funciones ya terminadas.
 8. Seleccionar alojamiento gratuito compatible y verificar el despliegue público del frontend, Gateway y microservicios. La migración de las seis bases a Supabase ya está completada.
 
 Los pagos aparecen como una posibilidad del sistema, no como un servicio adicional ya implementado. Tener seis microservicios supera el mínimo numérico, pero no garantiza la calificación de todos los criterios.

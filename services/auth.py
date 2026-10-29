@@ -1,6 +1,5 @@
 """Autenticación: cuentas, scrypt, sesiones opacas y eventos de bienvenida."""
 import hashlib
-import hmac
 import os
 import re
 import secrets
@@ -10,6 +9,7 @@ import uuid
 import postgres
 from urllib.parse import urlsplit
 import validation
+import account_security as security
 from common import APIError, Handler, INTEGRITY_ERRORS, SESSION_SECONDS, connect, enqueue, init_outbox, serve, session_hash, start_outbox
 
 with connect('auth') as db:
@@ -33,11 +33,26 @@ with connect('auth') as db:
             name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, phone TEXT NOT NULL DEFAULT '',
             active INTEGER NOT NULL DEFAULT 1, created DOUBLE PRECISION NOT NULL)''')
         db.execute("INSERT OR IGNORE INTO guests(id,user_id,name,email,created) SELECT id,id,name,email,created FROM users")
+        security.initialize_sqlite(db)
+security.recovery_origin()
 
 attempts, attempts_lock = {}, threading.Lock()
 
 def password_hash(password, salt):
-    return hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=32768, r=8, p=1, maxmem=64*1024*1024, dklen=32).hex()
+    return security.password_hash(password, salt)
+
+
+def limit_client(handler, bucket='access', maximum=12):
+    client = (bucket,handler.headers.get('X-Client-IP', handler.client_address[0]))
+    with attempts_lock:
+        now = time.time()
+        for key in list(attempts):
+            if not attempts[key] or now - attempts[key][-1] >= 60:
+                attempts.pop(key)
+        recent = [t for t in attempts.get(client, []) if now-t < 60]
+        if len(recent) >= maximum:
+            raise APIError(429, 'Demasiadas solicitudes. Espera un minuto.')
+        attempts[client] = recent + [now]
 
 def public_user(row):
     user = {key: row[key] for key in ('id', 'name', 'email')}
@@ -135,19 +150,27 @@ class Auth(Handler):
             with connect('auth') as db:
                 db.execute('DELETE FROM sessions WHERE token_hash=?', (session_hash(self),))
             return self.respond(200, {'ok': True}, {'Set-Cookie': session_cookie('', 0)})
+        if self.command == 'POST' and self.path == '/auth/forgot-password':
+            limit_client(self,'recovery',3)
+            data = self.body()
+            if set(data) != {'email'}:
+                raise APIError(400, 'Indica únicamente el correo de tu cuenta.')
+            return self.respond(202, security.request_recovery(validation.email(data['email'])))
+        if self.command == 'POST' and self.path == '/auth/reset-password':
+            limit_client(self,'reset',12)
+            data = self.body()
+            if set(data) != {'token','password','confirmPassword'}:
+                raise APIError(400, 'Completa el enlace y la nueva contraseña dos veces.')
+            password = data['password']
+            if not isinstance(password,str) or not 10 <= len(password) <= 128:
+                raise APIError(400, 'La contraseña debe tener entre 10 y 128 caracteres.')
+            if data['confirmPassword'] != password:
+                raise APIError(400, 'Las contraseñas no coinciden.')
+            security.reset_password(data['token'],password)
+            return self.respond(200, {'message':'Contraseña actualizada. Inicia sesión con tu nueva contraseña.'}, {'Set-Cookie':session_cookie('',0)})
         if self.command != 'POST' or self.path not in ('/auth/register', '/auth/login'):
             raise APIError(404, 'Ruta no encontrada.')
-        client = self.headers.get('X-Client-IP', self.client_address[0])
-        with attempts_lock:
-            now = time.time()
-            # Limita también el tamaño del registro de intentos en memoria.
-            for key in list(attempts):
-                if not attempts[key] or now - attempts[key][-1] >= 60:
-                    attempts.pop(key)
-            recent = [t for t in attempts.get(client, []) if now-t < 60]
-            if len(recent) >= 12:
-                raise APIError(429, 'Demasiados intentos. Espera un minuto.')
-            attempts[client] = recent + [now]
+        limit_client(self)
         data = self.body()
         if set(data) - {'name','email','password'}:
             raise APIError(400, 'El registro no permite asignar roles ni permisos.')
@@ -157,9 +180,16 @@ class Auth(Handler):
         email = email.strip().lower()
         if len(email) > 254 or not re.fullmatch(r'[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+', email) or '\r' in email or '\n' in email:
             raise APIError(400, 'Ingresa un correo válido.')
-        if not 10 <= len(password) <= 128:
-            raise APIError(400, 'La contraseña debe tener entre 10 y 128 caracteres.')
         registering = self.path.endswith('register')
+        if not (10 if registering else 1) <= len(password) <= 128:
+            raise APIError(400, 'La contraseña debe tener entre 10 y 128 caracteres.')
+        if not registering:
+            row, token, error = security.authenticate(email,password,session_hash(self))
+            if error:
+                status, body = error
+                headers = {'Retry-After':str(body['retryAfterSeconds'])} if body.get('retryAfterSeconds') else None
+                return self.respond(status,body,headers)
+            return self.respond(200, {'user':public_user(row)}, {'Set-Cookie':session_cookie(token)})
         with connect('auth') as db:
             row = db.execute('SELECT * FROM users WHERE email=?', (email,)).fetchone()
             if registering:
@@ -183,13 +213,7 @@ class Auth(Handler):
                     raise APIError(409, 'No se puede registrar esta cuenta. Intenta iniciar sesión.') from None
                 row = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
                 enqueue(db, {'id': 'welcome:' + uid, 'userId': uid, 'kind': 'welcome', 'payload': {}})
-            else:
-                salt = row['salt'] if row else '0'*32
-                derived = password_hash(password, salt)
-                if not row or not hmac.compare_digest(derived, row['password_hash']):
-                    raise APIError(401, 'Correo o contraseña incorrectos.')
-                if not row['active']:
-                    raise APIError(403, 'Esta cuenta está inactiva. Contacta con administración.')
+            db.execute('UPDATE login_security SET failed_attempts=0,window_started=0,locked_until=0 WHERE email_hash=?', (security.email_key(email),))
             token = secrets.token_urlsafe(32)
             db.execute('DELETE FROM sessions WHERE expires<=?', (time.time(),))
             # Rota la sesión presentada para evitar conservar la sesión anterior.

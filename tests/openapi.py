@@ -7,6 +7,16 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 class OpenAPI(unittest.TestCase):
+    def test_recovery_contract_does_not_return_secrets(self):
+        spec=yaml.safe_load((ROOT/'docs/openapi.yaml').read_text(encoding='utf-8'))
+        forgot=spec['paths']['/auth/forgot-password']['post']
+        reset=spec['paths']['/auth/reset-password']['post']
+        self.assertIn('202',forgot['responses'])
+        self.assertEqual(forgot['responses']['202']['content']['application/json']['schema'],{'$ref':'#/components/schemas/SecurityMessage'})
+        fields=reset['requestBody']['content']['application/json']['schema']['properties']
+        self.assertTrue(all(fields[key]['writeOnly'] for key in ('token','password','confirmPassword')))
+        self.assertIn('attemptsRemaining',spec['components']['schemas']['Error']['properties'])
+
     def test_references_and_security(self):
         for name in ('openapi.yaml','internal-openapi.yaml'):
             spec=yaml.safe_load((ROOT/'docs'/name).read_text(encoding='utf-8'))

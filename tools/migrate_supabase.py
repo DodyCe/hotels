@@ -19,6 +19,7 @@ import postgres
 
 # Clave primaria, columnas inmutables que deben coincidir en los reintentos.
 TABLES = {
+    # Los enlaces consumibles y contadores temporales no se copian/reproducen desde respaldos SQLite.
     'auth': {'users': ('id', ('id', 'name', 'email', 'salt', 'password_hash', 'created')),
              'sessions': ('token_hash', ('token_hash', 'user_id', 'expires')),
              'outbox': ('id', ('id', 'body')),

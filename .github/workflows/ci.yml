@@ -41,6 +41,7 @@ jobs:
       - run: python tests/database_config.py
       - run: python tests/migration.py
       - run: python tests/openapi.py
+      - run: python tests/security_email.py
 
   web:
     name: Frontend (ESLint y sintaxis)

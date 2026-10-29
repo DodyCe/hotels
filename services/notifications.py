@@ -7,6 +7,8 @@ import ssl
 import threading
 import time
 import postgres
+import re
+from account_security import RESET_SECONDS, recovery_origin
 from email.message import EmailMessage
 from common import APIError, AUTH, Handler, connect, internal_request, serve, user_for
 
@@ -27,6 +29,20 @@ def compose(kind, payload, user):
     if kind == 'welcome':
         subject = 'Bienvenido a Hotels'
         content = 'Tu cuenta fue creada. Ya puedes consultar, registrar y cancelar tus reservas.'
+    elif kind == 'password.reset':
+        url = payload.get('resetUrl','')
+        if not isinstance(url,str) or not re.fullmatch(re.escape(recovery_origin()+'/reset-password.html#token=')+r'[A-Za-z0-9_-]{43}',url):
+            raise APIError(400, 'Enlace de recuperación inválido.')
+        subject = 'Restablece tu contraseña de Hotels'
+        content = ('Recibimos una solicitud para restablecer tu contraseña.\n\n'
+                   'Abre este enlace para elegir una nueva contraseña:\n'+url+
+                   '\n\nEl enlace vence en 15 minutos y solo se puede usar una vez. '
+                   'Si solicitaste varios enlaces, usa el último. '
+                   'Si no solicitaste este cambio, ignora este correo. Tu contraseña sigue siendo la misma.')
+    elif kind == 'password.changed':
+        subject = 'Tu contraseña de Hotels fue actualizada'
+        content = ('Tu contraseña se actualizó y se cerraron todas tus sesiones anteriores. '
+                   'Si no reconoces este cambio, solicita la recuperación de tu cuenta desde Hotels.')
     elif kind in ('reservation.confirmed', 'reservation.cancelled'):
         cancelled = kind.endswith('cancelled')
         subject = ('Cancelación' if cancelled else 'Confirmación') + ' de reserva ' + str(payload.get('id', ''))
@@ -48,12 +64,23 @@ class Notifications(Handler):
         if self.command == 'GET' and self.path == '/notifications':
             user = user_for(self)
             with connect('notifications') as db:
-                rows = db.execute('SELECT id,recipient,subject,body,status,created FROM messages WHERE user_id=? ORDER BY created DESC LIMIT 100', (user['id'],)).fetchall()
+                rows = db.execute('SELECT id,recipient,subject,body,status,created FROM messages WHERE user_id=? AND id NOT LIKE ? ORDER BY created DESC LIMIT 100', (user['id'],'password-reset:%')).fetchall()
             return self.respond(200, {'notifications': [dict(r) for r in rows], 'smtpConfigured': smtp_ready()})
         if self.command == 'POST' and self.path == '/internal/events':
             event = self.body()
             if not isinstance(event.get('id'), str) or not 1 <= len(event['id']) <= 160 or not isinstance(event.get('userId'), str) or not isinstance(event.get('payload'), dict):
                 raise APIError(400, 'Evento inválido.')
+            private_reset = event.get('kind') == 'password.reset'
+            if private_reset != event['id'].startswith('password-reset:'):
+                raise APIError(400, 'Identificador de recuperación inválido.')
+            created = time.time()
+            if private_reset:
+                expires = event['payload'].get('expiresAt')
+                if not isinstance(expires,(int,float)) or isinstance(expires,bool) or not 0 < expires <= time.time()+RESET_SECONDS+5:
+                    raise APIError(400, 'Vencimiento de recuperación inválido.')
+                if expires <= time.time():
+                    return self.respond(200, {'accepted':True,'expired':True})
+                created = expires-RESET_SECONDS
             with connect('notifications') as db:
                 existing = db.execute('SELECT id FROM messages WHERE id=?', (event['id'],)).fetchone()
             if existing:
@@ -63,7 +90,7 @@ class Notifications(Handler):
             subject, content = compose(event.get('kind'), event['payload'], user)
             status = 'pendiente' if smtp_ready() else 'vista_previa'
             with connect('notifications') as db:
-                db.execute('INSERT INTO messages(id,user_id,recipient,subject,body,status,created) VALUES (?,?,?,?,?,?,?) ON CONFLICT (id) DO NOTHING', (event['id'], user['id'], user['email'], subject, content, status, time.time()))
+                db.execute('INSERT INTO messages(id,user_id,recipient,subject,body,status,created) VALUES (?,?,?,?,?,?,?) ON CONFLICT (id) DO NOTHING', (event['id'], user['id'], user['email'], subject, content, status, created))
             return self.respond(202, {'accepted': True})
         raise APIError(404, 'Ruta no encontrada.')
 
@@ -76,6 +103,11 @@ def smtp_worker():
             with connect('notifications') as db:
                 rows = db.execute("SELECT * FROM messages WHERE status IN ('pendiente','reintentando') AND attempts<5 AND next_try<=? ORDER BY created LIMIT 10", (time.time(),)).fetchall()
             for row in rows:
+                private_reset = row['id'].startswith('password-reset:')
+                if private_reset and row['created']+RESET_SECONDS <= time.time():
+                    with connect('notifications') as db:
+                        db.execute("UPDATE messages SET status='caducado',body='El enlace de recuperación venció.' WHERE id=?", (row['id'],))
+                    continue
                 try:
                     sender = os.environ.get('SMTP_FROM', '').strip()
                     if not sender or '\n' in sender or '\r' in sender:
@@ -98,6 +130,8 @@ def smtp_worker():
                         client.send_message(message)
                     with connect('notifications') as db:
                         db.execute("UPDATE messages SET status='aceptado_smtp',attempts=attempts+1 WHERE id=?", (row['id'],))
+                        if private_reset:
+                            db.execute("UPDATE messages SET body='Se envió un enlace de recuperación por correo.' WHERE id=?", (row['id'],))
                 except Exception:
                     # SMTP aceptado no prueba entrega a la bandeja de entrada.
                     with connect('notifications') as db:

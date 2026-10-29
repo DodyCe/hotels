@@ -1,11 +1,12 @@
 import concurrent.futures
 import datetime as dt
 import http.cookiejar
+import hashlib
 import json
 import sqlite3
 import time
 import uuid
-from contextlib import closing
+from contextlib import closing, contextmanager
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -18,6 +19,7 @@ checks = []
 USE_POSTGRES = False
 POSTGRES_SERVICES = set()
 FIXTURE_USERS = set()
+FIXTURE_EMAILS = set()
 RUN_TAG = uuid.uuid4().hex
 LEGACY_IDS = ('LEGACY-'+RUN_TAG+'-A', 'LEGACY-'+RUN_TAG+'-C')
 LEGACY_USER = 'legacy-'+RUN_TAG
@@ -34,6 +36,7 @@ def request(opener, path, data=None, headers=None, method=None):
         result = json.load(response)
         if path == '/api/auth/register' and response.code == 201:
             FIXTURE_USERS.add(result['user']['id'])
+            FIXTURE_EMAILS.add(data['email'].strip().lower())
         return response.code, result, response.headers
 def check(condition, label):
     assert condition, label
@@ -104,7 +107,96 @@ def run_checks(data_dir):
     advanced_checks(a,b,data_dir,password,email_a)
     inventory_concurrency_checks(a,password,email_a)
     admin_checks(a,data_dir,password,email_a)
+    recovery_checks(data_dir,password)
     print(json.dumps({'passed':len(checks),'checks':checks},ensure_ascii=False,indent=2))
+
+
+@contextmanager
+def fixture_db(service, directory):
+    if service in POSTGRES_SERVICES:
+        import postgres
+        with postgres.connect(service) as db:
+            yield db
+    else:
+        with closing(sqlite3.connect(Path(directory)/(service+'.sqlite3'))) as db:
+            db.row_factory=sqlite3.Row
+            with db:
+                yield db
+
+
+def recovery_checks(directory,password):
+    import re
+    def restart():
+        CONTROLLER('stop',18101); CONTROLLER('start',18101)
+    restart()
+    account,other=client(),client()
+    email='recovery-'+RUN_TAG+'@example.test'
+    uid=request(account,'/api/auth/register',{'name':'Recuperación','email':email,'password':password})[1]['user']['id']
+    other_email='other-'+RUN_TAG+'@example.test'
+    request(other,'/api/auth/register',{'name':'Otra cuenta','email':other_email,'password':password})
+    key=hashlib.sha256(email.encode()).hexdigest()
+    for remaining in (5,4,3,2,1,0):
+        code,body,_=request(client(),'/api/auth/login',{'email':email.upper(),'password':'incorrecta'})
+        check(code==(429 if remaining==0 else 401) and body.get('attemptsRemaining')==remaining,
+              'Intento fallido: quedan '+str(remaining)+' de seis intentos por correo')
+    restart()
+    code,body,headers=request(client(),'/api/auth/login',{'email':email,'password':password})
+    check(code==429 and 0<body['retryAfterSeconds']<=900 and headers.get('Retry-After'), 'Bloqueo persistente de 15 minutos, incluso con la clave correcta y tras reiniciar Auth')
+    check(request(client(),'/api/auth/login',{'email':other_email,'password':password})[0]==200, 'El bloqueo de un correo no afecta a otra cuenta')
+    unknown='unknown-'+RUN_TAG+'@example.test'; FIXTURE_EMAILS.add(unknown)
+    first=request(client(),'/api/auth/forgot-password',{'email':email})
+    absent=request(client(),'/api/auth/forgot-password',{'email':unknown})
+    check(first[0]==absent[0]==202 and first[1]==absent[1] and 'token' not in first[1], 'Recuperación uniforme para correos existentes e inexistentes, sin revelar enlaces')
+    second=request(client(),'/api/auth/forgot-password',{'email':email})
+    with fixture_db('auth',directory) as db:
+        saved=dict(db.execute('SELECT * FROM password_resets WHERE user_id=?',(uid,)).fetchone())
+        count=db.execute('SELECT count(*) AS n FROM outbox WHERE id LIKE ?',('password-reset:'+uid+':%',)).fetchone()['n']
+    check(second[0]==202 and count==1 and 0<saved['expires']-time.time()<=900, 'Reenvíos limitados sin invalidar el enlace durante el minuto de espera')
+    def read_link():
+        with fixture_db('notifications',directory) as db:
+            row=db.execute('SELECT body FROM messages WHERE user_id=? AND id LIKE ? ORDER BY created DESC LIMIT 1',(uid,'password-reset:%')).fetchone()
+            return re.search(r'#token=([A-Za-z0-9_-]{43})',row['body']).group(1) if row else None
+    check(poll(read_link,timeout=25),'Auth entrega el correo de recuperación a Notificaciones')
+    token=read_link()
+    check(saved['token_hash']==hashlib.sha256(token.encode()).hexdigest() and token not in saved.values(), 'Auth conserva únicamente el hash del enlace de recuperación')
+    check(not any(n['id'].startswith('password-reset:') for n in request(account,'/api/notifications')[1]['notifications']), 'El enlace no aparece en la bandeja de la web, aun con una sesión abierta')
+    def sanitized():
+        with fixture_db('auth',directory) as db:
+            rows=db.execute('SELECT body,delivered FROM outbox WHERE id LIKE ?',('password-reset:'+uid+':%',)).fetchall()
+            return rows and all(r['delivered'] and r['body']=='{}' for r in rows)
+    check(poll(sanitized,timeout=15),'Auth elimina el enlace del outbox después de entregarlo a Notificaciones')
+    new_password='Nueva-Hotels-2026!'
+    reset={'token':token,'password':new_password,'confirmPassword':new_password}
+    check(request(client(),'/api/auth/reset-password',{**reset,'confirmPassword':'Diferente-2026!'})[0]==400,'La recuperación valida ambas contraseñas')
+    check(request(client(),'/api/auth/reset-password',{**reset,'token':'x'*43})[0]==400,'Un enlace inventado no permite cambiar contraseñas')
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        codes=list(pool.map(lambda _:request(client(),'/api/auth/reset-password',reset)[0],range(2)))
+    check(sorted(codes)==[200,400], 'Un enlace se consume una sola vez, incluso con dos cambios simultáneos')
+    check(request(account,'/api/auth/me')[0]==401 and request(other,'/api/auth/me')[0]==200, 'La recuperación revoca todas las sesiones propias y conserva las ajenas')
+    check(request(client(),'/api/auth/login',{'email':email,'password':password})[0]==401 and request(account,'/api/auth/login',{'email':email,'password':new_password})[0]==200,'La nueva contraseña funciona, reemplaza la anterior y desbloquea la cuenta')
+    with fixture_db('auth',directory) as db:
+        db.execute('UPDATE login_security SET reset_requested_at=0 WHERE email_hash=?',(key,))
+    restart()
+    request(client(),'/api/auth/forgot-password',{'email':email})
+    with fixture_db('auth',directory) as db:
+        db.execute('UPDATE password_resets SET expires=? WHERE user_id=?',(time.time()-1,uid))
+        expired=db.execute('SELECT token_hash FROM password_resets WHERE user_id=?',(uid,)).fetchone()['token_hash']
+    check(poll(lambda:read_link() and hashlib.sha256(read_link().encode()).hexdigest()==expired,timeout=25),'Se puede solicitar otro enlace después del periodo de espera')
+    check(request(client(),'/api/auth/reset-password',{**reset,'token':read_link()})[0]==400,'Un enlace vencido se rechaza sin modificar la contraseña')
+    with fixture_db('auth',directory) as db:
+        db.execute('UPDATE login_security SET failed_attempts=6,locked_until=?,window_started=? WHERE email_hash=?',(time.time()-1,time.time()-901,key))
+    check(request(account,'/api/auth/login',{'email':email,'password':new_password})[0]==200,'El bloqueo se levanta al vencer su plazo')
+    restart(); CONTROLLER('start',18201)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            results=list(pool.map(lambda n:internal(18101 if n%2 else 18201,'/auth/login',{'email':email,'password':'incorrecta'}),range(6)))
+        check(sorted(r[1].get('attemptsRemaining',-1) for r in results)==[0,1,2,3,4,5], 'Dos instancias de Auth comparten el límite exacto de seis intentos concurrentes')
+    finally:
+        CONTROLLER('stop',18201)
+    with fixture_db('auth',directory) as db:
+        check(db.execute('SELECT failed_attempts FROM login_security WHERE email_hash=?',(key,)).fetchone()['failed_attempts']==6,'Los fallos concurrentes se guardan sin perder incrementos')
+    with urllib.request.urlopen(BASE+'/reset-password.html') as response:
+        check(response.headers['Referrer-Policy']=='no-referrer' and response.headers['Cache-Control']=='no-store','La página de recuperación evita caché y filtración por Referer')
 
 
 def admin_checks(customer,data_dir,password,email):
@@ -386,7 +478,7 @@ def main():
                         raise SystemExit('Hay eventos reales pendientes; no se ejecutan pruebas para no consumirlos.')
                     if name=='reservations' and db.execute("SELECT COUNT(*) AS total FROM reservations WHERE room_id='' OR inventory_synced=0 OR status IN ('Pendiente','Cancelando')").fetchone()['total']:
                         raise SystemExit('Hay reservas reales por reconciliar; no se ejecutan pruebas sobre ellas.')
-    for port in (18080,*PORTS,18206,18203):
+    for port in (18080,*PORTS,18206,18203,18201):
         with socket.socket() as probe:
             try: probe.bind(('127.0.0.1',port))
             except OSError: raise SystemExit('Puerto de pruebas ocupado: '+str(port)) from None
@@ -415,10 +507,10 @@ def main():
             AUTH_URL='http://127.0.0.1:18101',NOTIFICATIONS_URL='http://127.0.0.1:18102',
             RESERVATIONS_URL='http://127.0.0.1:18103',CATALOG_URL='http://127.0.0.1:18104',
             ROOMS_URL='http://127.0.0.1:18105',AVAILABILITY_URL='http://127.0.0.1:18106',
-            SERVICE_BIND='127.0.0.1',GATEWAY_BIND='127.0.0.1',COOKIE_SECURE='0',PYTHONDONTWRITEBYTECODE='1')
-        files={18101:'services/auth.py',18102:'services/notifications.py',18103:'services/reservations.py',18203:'services/reservations.py',18104:'services/catalog.py',18105:'services/rooms.py',18106:'services/availability.py',18206:'services/availability.py',18080:'gateway.py'}
+            SERVICE_BIND='127.0.0.1',GATEWAY_BIND='127.0.0.1',COOKIE_SECURE='0',PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
+        files={18101:'services/auth.py',18201:'services/auth.py',18102:'services/notifications.py',18103:'services/reservations.py',18203:'services/reservations.py',18104:'services/catalog.py',18105:'services/rooms.py',18106:'services/availability.py',18206:'services/availability.py',18080:'gateway.py'}
         processes={}
-        with (Path(temp)/'services.log').open('w+',encoding='utf-8') as logs:
+        with (Path(temp)/'services.log').open('w+',encoding='utf-8',errors='replace') as logs:
             def control(action,port):
                 if action=='stop':
                     p=processes[port]
@@ -427,7 +519,7 @@ def main():
                     except subprocess.TimeoutExpired:p.kill();p.wait()
                 else:
                     child_env={**env,'PORT':str(port)}
-                    owner_keys = {18101:'AUTH_DATABASE_URL',18102:'NOTIFICATIONS_DATABASE_URL',18103:'RESERVATIONS_DATABASE_URL',18203:'RESERVATIONS_DATABASE_URL',18104:'CATALOG_DATABASE_URL',18105:'ROOMS_DATABASE_URL',18106:'AVAILABILITY_DATABASE_URL',18206:'AVAILABILITY_DATABASE_URL'}
+                    owner_keys = {18101:'AUTH_DATABASE_URL',18201:'AUTH_DATABASE_URL',18102:'NOTIFICATIONS_DATABASE_URL',18103:'RESERVATIONS_DATABASE_URL',18203:'RESERVATIONS_DATABASE_URL',18104:'CATALOG_DATABASE_URL',18105:'ROOMS_DATABASE_URL',18106:'AVAILABILITY_DATABASE_URL',18206:'AVAILABILITY_DATABASE_URL'}
                     for key in ('AUTH_DATABASE_URL','NOTIFICATIONS_DATABASE_URL','CATALOG_DATABASE_URL','ROOMS_DATABASE_URL','RESERVATIONS_DATABASE_URL','AVAILABILITY_DATABASE_URL'):
                         if key != owner_keys.get(port): child_env.pop(key,None)
                     processes[port]=subprocess.Popen([sys.executable,str(root/files[port])],cwd=root,env=child_env,stdout=logs,stderr=logs)
@@ -467,8 +559,10 @@ def main():
                             db.execute('DELETE FROM messages WHERE user_id=?',(uid,))
                     with postgres.connect('auth') as db:
                         for uid in FIXTURE_USERS:
-                            db.execute('DELETE FROM outbox WHERE id=?',('welcome:'+uid,))
+                            db.execute('DELETE FROM outbox WHERE id=? OR id LIKE ? OR id LIKE ?',('welcome:'+uid,'password-reset:'+uid+':%','password-changed:'+uid+':%'))
                             db.execute('DELETE FROM sessions WHERE user_id=?',(uid,))
                             db.execute('DELETE FROM users WHERE id=?',(uid,))
+                        for email in FIXTURE_EMAILS:
+                            db.execute('DELETE FROM login_security WHERE email_hash=?',(hashlib.sha256(email.encode()).hexdigest(),))
 
 if __name__=='__main__':main()
