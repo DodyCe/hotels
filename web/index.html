@@ -6,7 +6,9 @@
   <meta name="theme-color" content="#173f3b">
   <meta name="description" content="Hotels: explora alojamientos en Montería, consulta habitaciones y disponibilidad y gestiona tus reservas.">
   <title>Hotels · Descubre Montería</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 50'%3E%3Crect width='50' height='50' rx='12' fill='%23173f3b'/%3E%3Ctext x='10' y='37' fill='%23f3ede1' font-family='Georgia' font-size='38'%3Eh%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
@@ -71,9 +73,7 @@
         <span class="field-title">DESTINO</span>
         <span class="input-icon">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
-          <select id="destination" aria-label="Destino">
-            <option value="Montería">Montería, Córdoba</option>
-          </select>
+          <span class="static-value" id="destination">Montería, Córdoba</span>
         </span>
       </label>
       <label>
@@ -197,7 +197,10 @@
     <span>Montería, Colombia · 2026</span>
   </footer>
 
-  <div class="toast" id="toast" role="status" hidden></div>
+  <div class="toast" id="toast" role="status" popover="manual" hidden>
+    <span id="toast-message"></span>
+    <button type="button" class="toast-close" aria-label="Cerrar aviso">✕</button>
+  </div>
 
   <dialog id="modal" aria-label="Ventana de Hotels">
     <div class="modal-header">
