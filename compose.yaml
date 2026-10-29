@@ -62,6 +62,7 @@ services:
     environment:
       <<: *environment
       PORT: "8103"
+      RESERVATIONS_DATABASE_URL: ${RESERVATIONS_DATABASE_URL:-}
     volumes: ["reservation-data:/data"]
   catalog:
     <<: *common
@@ -85,6 +86,7 @@ services:
     environment:
       <<: *environment
       PORT: "8106"
+      AVAILABILITY_DATABASE_URL: ${AVAILABILITY_DATABASE_URL:-}
     volumes: ["inventory-data:/data"]
 
 volumes:

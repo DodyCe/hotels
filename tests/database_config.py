@@ -44,7 +44,8 @@ class DatabaseConfiguration(unittest.TestCase):
 
     def test_only_owner_gets_database_and_smtp_credentials(self):
         with patch.dict(os.environ, AUTH_DATABASE_URL='auth-private', NOTIFICATIONS_DATABASE_URL='notifications-private',
-                        CATALOG_DATABASE_URL='catalog-private', ROOMS_DATABASE_URL='rooms-private', SMTP_PASSWORD='smtp-private'):
+                        CATALOG_DATABASE_URL='catalog-private', ROOMS_DATABASE_URL='rooms-private',
+                        RESERVATIONS_DATABASE_URL='reservations-private',AVAILABILITY_DATABASE_URL='availability-private',SMTP_PASSWORD='smtp-private'):
             for path in ('services/auth.py', 'services/notifications.py', 'services/reservations.py',
                          'services/catalog.py', 'services/rooms.py', 'services/availability.py', 'gateway.py'):
                 env = service_environment(path)
@@ -52,6 +53,8 @@ class DatabaseConfiguration(unittest.TestCase):
                 self.assertEqual('NOTIFICATIONS_DATABASE_URL' in env, path == 'services/notifications.py')
                 self.assertEqual('CATALOG_DATABASE_URL' in env, path == 'services/catalog.py')
                 self.assertEqual('ROOMS_DATABASE_URL' in env, path == 'services/rooms.py')
+                self.assertEqual('RESERVATIONS_DATABASE_URL' in env, path == 'services/reservations.py')
+                self.assertEqual('AVAILABILITY_DATABASE_URL' in env, path == 'services/availability.py')
                 self.assertEqual('SMTP_PASSWORD' in env, path == 'services/notifications.py')
 
     def test_catalog_cannot_share_the_auth_project(self):
@@ -65,11 +68,22 @@ class DatabaseConfiguration(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Completa'):
                 postgres.validate_configuration(require_services=tuple(postgres.SETTINGS))
 
-    def test_four_distinct_projects_are_accepted(self):
+    def test_six_distinct_projects_are_accepted(self):
         settings = {key:f'postgresql://app:example@db.project{index}.supabase.co/postgres'
                     for index,key in enumerate(postgres.SETTINGS.values())}
         with patch.dict(os.environ, settings):
             postgres.validate_configuration(require_services=tuple(postgres.SETTINGS))
+
+    def test_reservations_and_inventory_cannot_share_a_database(self):
+        with patch.dict(os.environ, RESERVATIONS_DATABASE_URL='postgresql://app:example@db.same.supabase.co/postgres',
+                        AVAILABILITY_DATABASE_URL='postgresql://other.same:example@aws-0-us-east-1.pooler.supabase.com/postgres'):
+            with self.assertRaisesRegex(ValueError,'bases distintas'):
+                postgres.validate_configuration()
+
+    def test_reservations_and_inventory_are_required_in_complete_mode(self):
+        with patch.dict(os.environ,RESERVATIONS_DATABASE_URL='',AVAILABILITY_DATABASE_URL=''):
+            with self.assertRaisesRegex(ValueError,'Completa'):
+                postgres.validate_configuration(require_services=tuple(postgres.SETTINGS))
 
 
 if __name__ == '__main__':

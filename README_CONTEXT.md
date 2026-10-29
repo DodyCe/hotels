@@ -4,6 +4,42 @@ Actualizado el **28 de octubre de 2026**. Este es el documento central de contex
 
 Los resultados de ejecución que se citan conservan sus fechas. Tener código escrito, un proveedor configurado o un commit publicado no significa haber completado un despliegue público ni todos los entregables.
 
+### Actualización del 26 de octubre de 2026 — migración de Reservas e Inventario
+
+El usuario confirmó que los dos servicios de esta etapa son **Reservas** y **Disponibilidad e inventario**. Disponibilidad e inventario es un solo dominio y proceso (`services/availability.py`, puerto 8106): conserva las unidades/asignaciones y calcula las unidades libres por fechas. Separarlo en dos dominios sería otro cambio de arquitectura, que no se ha solicitado ni implementado. El total sigue siendo seis microservicios.
+
+En la tercera cuenta se creó la organización gratuita `Hotels` (`utdpmgiymdbumjsnxdyv`) con **dos proyectos**, no tres: `hotels-reservations` (`fhqpyidzbbldxuskckyh`) y `hotels-availability` (`clubrnifkutcjsfvrxlk`). Hotels es el nombre de la organización; no es un proyecto adicional. Las otras cuatro bases permanecen en las cuentas anteriores. Ambos proyectos nuevos se crearon con Data API desactivada, esquemas privados, RLS y roles limitados; las contraseñas y conexiones están fuera de Git.
+
+Se respaldaron las bases y configuración en `data/backups/before-reservations-availability-20261026T152544Z-2629cc/`. La copia a PostgreSQL conservó dos reservas, cuatro eventos de outbox, seis registros de inventario y una asignación/liberación; se comprobó cero pendientes. Los archivos SQLite originales se conservan.
+
+Se implementaron bloqueos PostgreSQL por identificador de reserva/asignación y por habitación para impedir sobreventa entre instancias, cancelaciones idempotentes y recuperación de fallos. La consulta de disponibilidad se adaptó para evitar un viaje SQL por cada noche. Aprobaron 63 comprobaciones SQLite, 11 de configuración y ocho de migración. La primera integración completa con seis PostgreSQL detectó una solicitud concurrente que superaba el tiempo del Gateway: se corrigió reutilizando la conexión durante cada transición y usando aislamiento READ COMMITTED. El registro posterior del 26 contiene 67 comprobaciones aprobadas; la combinación se volvió a verificar el 28, como se detalla a continuación. La publicación estaba pendiente al cerrar la migración; se incorpora junto con el frontend del colaborador en la integración descrita más abajo. Los procesos siguen locales. Las secciones de estado actual ya describen seis PostgreSQL; los resultados históricos conservan sus fechas.
+
+### Revisión del 28 de octubre de 2026 — cambios del colaborador y compatibilidad
+
+El usuario pidió comprobar la página y sus microservicios después de los cambios del colaborador. Se actualizó la referencia remota sin hacer pull sobre el árbol con modificaciones: al comenzar la revisión, la carpeta activa estaba en `59e8102916b416224e1d9a5f486671d245dbcefa` y `origin/main` en `f838cbb124f1558da8f25a8f604f976bbcb2cc7f`. Se usó una copia de revisión separada en `C:\Users\DODY\Documents\Codex\2026-10-15\rev\work\hotels-review-oct28-f838cbb` para conservar los cambios locales. La revisión no creó commits, no hizo push y no mezcló la rama principal de la carpeta activa.
+
+Los pull requests #1 a #9 incorporan CSS/HTML formateado, fuentes y fotografías adaptables, favicon, foco de modales, confirmación antes de cancelar, fechas de Montería, filtro de precio, resumen de cuenta, reservas agrupadas, avisos con presentación de correo, animaciones y barra móvil de reserva. Auth agrega `created` a la respuesta del perfil y Notificaciones importa `hashlib` directamente. También se añadieron OpenAPI, GitHub Actions, ESLint, Ruff y pre-commit. El contrato básico sigue siendo compatible con los seis servicios. Durante esta revisión las mejoras solo estaban en la versión remota y la copia separada; después se incorporaron a la carpeta activa con autorización del usuario.
+
+Resultados de esta revisión:
+
+- **Versión publicada sin nuestras modificaciones pendientes:** 57 comprobaciones de integración con seis SQLite temporales, 57 con sus cuatro PostgreSQL y dos SQLite temporales, nueve pruebas de configuración y cinco de migración, todas aprobadas.
+- **Combinación de los cambios remotos con nuestra conexión a las seis bases:** 67 comprobaciones de integración con seis PostgreSQL, 11 pruebas de configuración y ocho de migración, todas aprobadas. Incluye registro, sesiones, acceso por propietario, cálculo de precios, creación/cancelación, notificaciones, recuperación de fallos y concurrencia entre instancias de Reservas e Inventario. Se mantuvo la corrección `raise ... from None` del colaborador en la copia de pruebas.
+- **Calidad:** ESLint y sintaxis de ambos JavaScript, Ruff y los seis controles de pre-commit aprobados. Los tres trabajos del último pull request #9 figuran como aprobados en GitHub. El YAML OpenAPI se pudo leer y sus 54 referencias internas se resolvieron; no equivale a una certificación completa del contrato.
+- **Navegador contra los seis servicios reales con SQLite temporal:** registro de una cuenta desechable, resumen de cuenta, filtro por precio, reserva desde la barra móvil, consulta agrupada, volver sin cancelar, cancelación confirmada y tres avisos (bienvenida, confirmación y cancelación). No aparecieron errores ni advertencias en la consola. Se revisaron escritorio de 1366 × 900 y móvil de 390 × 844, sin desbordamiento horizontal. Las pruebas automáticas separadas cubrieron los mismos flujos con PostgreSQL.
+- **Conservación de datos remotos:** al terminar las pruebas las seis bases conservaron sus conteos iniciales: Auth dos usuarios, cero sesiones y dos eventos; Notificaciones seis mensajes; Catálogo tres hoteles; Habitaciones seis tipos; Reservas dos reservas y cuatro eventos; Inventario seis registros y una asignación/liberación. Ningún outbox quedó pendiente. Las cuentas y reservas de las pruebas se retiraron mediante la limpieza limitada a sus propios identificadores.
+- **Correo real:** la configuración privada está completa y Gmail aceptó la autenticación SMTP con TLS y un comando NOOP. Se enviaron cero correos. Esto verifica conexión y autenticación, sin afirmar una entrega nueva en bandeja de entrada. Las pruebas de notificaciones ejecutaron SMTP desactivado.
+- **Comprobación final de la combinación:** Gateway y los seis `/health` respondieron HTTP 200; cada microservicio informó `database: postgresql`. Las APIs devolvieron tres hoteles, seis habitaciones y seis registros de inventario/disponibilidad. Se arrancó esta copia en el puerto 8080 con las seis conexiones y SMTP desactivado para la revisión; las bases están en Supabase y los procesos siguen locales.
+
+Las evidencias y registros de esta revisión están en la carpeta temporal de trabajo `rev\work`, fuera del código publicable. La integración posterior conserva los cambios remotos y la migración local ya verificada, como se registra en el siguiente apartado. No falta crear dos bases: **ya existen seis proyectos independientes**. JWT, Docker ejecutado y despliegue público no se dieron por terminados con esta revisión.
+
+### Integración autorizada del 28 de octubre de 2026
+
+El usuario pidió incorporar la combinación ya probada. Se conservaron todos los commits y pull requests del colaborador y se consolidaron encima los cambios de conexión, migración y concurrencia de Reservas e Inventario. El código de la carpeta principal corresponde a esa combinación, sin sustituir las mejoras de frontend, Auth, Notificaciones, OpenAPI o calidad. Las comprobaciones de 67 casos PostgreSQL y 19 pruebas de configuración/migración corresponden exactamente a los archivos de backend integrados; se compararon antes de mover la rama principal. Durante la incorporación también aprobaron 63 comprobaciones de integración SQLite temporal, pre-commit y ESLint. En conjunto, las dos modalidades de integración y las pruebas de configuración/migración suman 149 comprobaciones para esta combinación.
+
+Antes de incorporar se respaldaron las modificaciones, migraciones nuevas, el parche y el `.env` en `data/backups/before-incorporation-20261029T045820Z/`, con manifiesto SHA-256. El `.env` principal se conservó sin cambios; los secretos, los datos y los respaldos quedan fuera de Git. Un stash adicional conserva el árbol anterior. Se usa un avance rápido de Git hacia el commit consolidado para no reescribir ni perder la historia del colaborador. La subida a `origin/main` se verifica comparando el identificador local y remoto.
+
+La instancia de revisión del puerto 8080 se reemplaza por el arranque normal desde `optativa/hotels`, utilizando sus seis PostgreSQL y la configuración SMTP existente. Las pruebas automáticas tienen SMTP desactivado; no se generan correos reales de comprobación. Las bases siguen en Supabase y el frontend, Gateway y microservicios siguen ejecutándose localmente. No se realizó un despliegue público.
+
 ## 1. Objetivo y guía
 
 Hotels desarrolla el **proyecto 6: Sistema de Reservas Hoteleras**, de la guía `PROYECTO FINAL_mivcroservicios GRUPO 11-2.docx`. La guía original se conserva en la carpeta `optativa`; no es un archivo del funcionamiento de la web. Se leyó completa y se exportó una copia temporal de nueve páginas a PDF para revisar también las secciones finales. El original no se modificó.
@@ -38,7 +74,7 @@ hotels/
   web/                      HTML, CSS y JavaScript del frontend
   services/                 Código de los seis microservicios y utilidades
   seed/                     Datos iniciales de hoteles, habitaciones e inventario
-  migrations/               SQL de Auth, Notificaciones, Catálogo y Habitaciones
+  migrations/               SQL de los seis microservicios
   tools/                    Comprobación SMTP y migración de datos
   tests/                    Pruebas ejecutables del proyecto
   docs/openapi.yaml         Especificación OpenAPI 3.1 de la API pública
@@ -55,7 +91,7 @@ hotels/
 - **Frontend:** HTML5, CSS y JavaScript del navegador, sin React, Angular ni un framework de frontend. `web/index.html` estructura la página; `web/styles.css` y `web/hotels.css` definen la presentación; `web/app.js` consume las APIs; `web/catalog.js` permite una vista de diseño sin servidor.
 - **Backend:** Python 3.12 o superior. Se utilizó Python 3.12.14 en las verificaciones iniciales. Los procesos usan principalmente la biblioteca estándar: `http.server`, `urllib`, `sqlite3`, `threading`, `logging`, `hashlib`, `secrets`, `smtplib`, `ssl` y `email.message`.
 - **PostgreSQL:** `psycopg[binary]==3.3.6`, fijado en `requirements.txt`. No se usan el SDK ni el producto Supabase Auth para autenticar a los usuarios de Hotels.
-- **Persistencia:** cuatro proyectos PostgreSQL independientes en Supabase y dos bases SQLite activas, una por servicio restante. JSON se usa para las semillas y los mensajes de API.
+- **Persistencia:** seis proyectos PostgreSQL independientes en Supabase, uno por microservicio. SQLite se conserva como alternativa local explícita y para pruebas temporales; no es la base activa de ninguno de los seis servicios configurados. JSON se usa para las semillas y los mensajes de API.
 - **Correo:** Gmail SMTP configurable, TLS y contraseña de aplicación de una cuenta dedicada a Hotels. El correo lo envía Notificaciones; Supabase almacena datos.
 - **Contenedores:** `Dockerfile` basado en `python:3.12-slim` y Docker Compose con un componente por proceso. Se escribieron las definiciones; su ejecución sigue pendiente de validación.
 - **Control de versiones:** Git y el repositorio público [DodyCe/hotels](https://github.com/DodyCe/hotels). Se utilizó la CLI para revisar cambios, crear commits, subirlos y comparar el HEAD local/remoto. Desde el 28 de octubre los cambios se trabajan en ramas por tema y entran a `main` mediante pull requests, creados y fusionados con GitHub CLI (`gh`).
@@ -83,10 +119,10 @@ flowchart LR
   G --> I[Disponibilidad e inventario 8106]
   A --> DA[(PostgreSQL Auth)]
   N --> DN[(PostgreSQL Notificaciones)]
-  R --> DR[(SQLite Reservas)]
+  R --> DR[(PostgreSQL Reservas)]
   C --> DC[(PostgreSQL Catálogo)]
   H --> DH[(PostgreSQL Habitaciones)]
-  I --> DI[(SQLite Inventario)]
+  I --> DI[(PostgreSQL Inventario)]
   R -->|Hotel, habitación y cupo por API| C
   R --> H
   R --> I
@@ -103,27 +139,27 @@ Este esquema ayuda a explicar el sistema. Los diagramas formales de arquitectura
 
 1. **Autenticación — 8101 — `services/auth.py`.** Registra cuentas, valida contraseñas, crea/revoca sesiones y conserva el correo del usuario. Usa el proyecto PostgreSQL `hotels-auth`: esquema privado `hotels_auth`, tablas `users`, `sessions` y `outbox`.
 2. **Notificaciones — 8102 — `services/notifications.py`.** Recibe eventos, obtiene el destinatario en Auth, guarda mensajes y gestiona SMTP y reintentos. Usa otro proyecto PostgreSQL, `hotels-notifications`: esquema privado `hotels_notifications`, tabla `messages`.
-3. **Reservas — 8103 — `services/reservations.py`.** Guarda propietario, habitación, fechas, huéspedes, importe y estado de la operación, además de su outbox. Usa `data/reservations.sqlite3`.
+3. **Reservas — 8103 — `services/reservations.py`.** Guarda propietario, habitación, fechas, huéspedes, importe y estado de la operación, además de su outbox. Usa PostgreSQL en `hotels-reservations`, esquema privado `hotels_reservations`, tablas `reservations` y `outbox`.
 4. **Catálogo de hoteles — 8104 — `services/catalog.py`.** Guarda establecimientos, ubicación, descripciones, fuentes y créditos; la tabla `hotels` conserva documentos JSON. Usa PostgreSQL en `hotels-catalog`, esquema `hotels_catalog`, tabla `hotels`. Las habitaciones, tarifas y ocupaciones pertenecen a otros servicios.
 5. **Habitaciones — 8105 — `services/rooms.py`.** Tabla `rooms`: identificador, hotel, nombre del tipo, capacidad y precio. Usa PostgreSQL en `hotels-rooms`, esquema `hotels_rooms`, tabla `rooms`.
-6. **Disponibilidad e inventario — 8106 — `services/availability.py`.** Tablas `inventory` y `allocations`: unidades por tipo de habitación, ocupación por rango y estado de asignación/liberación. Usa `data/availability.sqlite3`.
+6. **Disponibilidad e inventario — 8106 — `services/availability.py`.** Tablas `inventory` y `allocations`: unidades por tipo de habitación, ocupación por rango y estado de asignación/liberación. Usa PostgreSQL en `hotels-availability`, esquema privado `hotels_availability`. Disponibilidad e inventario forman un único microservicio.
 
 Cada servicio tiene API, proceso y base propios. Ninguno consulta directamente tablas de otro. Los identificadores entre dominios se resuelven por API; no hay claves foráneas entre proyectos PostgreSQL. Reservas conserva nombres e importe históricos de la operación, aunque los datos de origen cambien.
 
 Hay tres hoteles de referencia y seis tipos de habitación, dos por hotel. Cada tipo comienza con una unidad de inventario de ejemplo. Las semillas `seed/hotels.json`, `seed/rooms.json` y `seed/inventory.json` inicializan solo su servicio; cambiar una semilla no sobrescribe automáticamente registros existentes.
 
-Los archivos anteriores `auth.sqlite3`, `notifications.sqlite3`, `catalog.sqlite3` y `rooms.sqlite3` se conservan en `data` junto con los respaldos; no son las bases activas cuando sus URL PostgreSQL están configuradas. Si una URL se deja vacía, ese servicio puede funcionar en SQLite. Una URL configurada e inválida provoca un error, no un cambio silencioso de base.
+Los archivos anteriores `auth.sqlite3`, `notifications.sqlite3`, `catalog.sqlite3`, `rooms.sqlite3`, `reservations.sqlite3` y `availability.sqlite3` se conservan en `data` junto con los respaldos; no son las bases activas cuando sus URL PostgreSQL están configuradas. Si una URL se deja vacía, ese servicio puede funcionar en SQLite. Una URL configurada e inválida provoca un error, no un cambio silencioso de base.
 
 ## 6. Razones de las decisiones
 
 - **Seis dominios:** separar los datos del hotel, características de la habitación, ocupación, transacción, identidad y entrega de mensajes evita mezclar responsabilidades y cumple el mínimo de la guía.
-- **Una base por servicio:** cada dominio controla sus tablas y evolución. Las cuatro bases remotas están en proyectos físicamente separados, no en dos esquemas de una misma base presentada como dos bases independientes.
+- **Una base por servicio:** cada dominio controla sus tablas y evolución. Las seis bases remotas están en proyectos físicamente separados, no en dos esquemas de una misma base presentada como dos bases independientes.
 - **Monorepositorio:** facilita revisar contratos, semillas y pruebas coordinadas. Compartir repositorio o una máquina no obliga a compartir proceso ni base. Un único `start.py` sirve para desarrollo, pero no demuestra despliegues independientes.
 - **Gateway:** ofrece una sola entrada para el navegador, enruta las APIs y controla hosts/origen sin entregar la clave interna al frontend. Cada servicio sigue comprobando las autorizaciones de su dominio.
 - **Sesiones opacas:** permiten revocación inmediata y un flujo sencillo con cookies. Requieren consultar Auth para validar la sesión; se documentaron como alternativa a JWT.
 - **Outbox e idempotencia:** conservar el evento junto con el cambio de negocio permite reintentar sin perderlo cuando Notificaciones no responde. Se utiliza HTTP y trabajadores asíncronos, sin un broker adicional.
 - **SMTP configurable:** permite cambiar de proveedor sin modificar la interfaz ni incluir secretos en el código. La cuenta dedicada evita mantener el correo personal como identidad del producto.
-- **Dos proyectos Supabase primero:** se eligieron Auth y Notificaciones según la decisión del usuario y el límite gratuito de su cuenta en esa etapa. El 23 de octubre se migraron Catálogo y Habitaciones en una segunda cuenta del usuario. Reservas e Inventario siguen locales; su migración permanece pendiente.
+- **Dos proyectos Supabase primero:** se eligieron Auth y Notificaciones según la decisión del usuario y el límite gratuito de su cuenta en esa etapa. El 23 de octubre se migraron Catálogo y Habitaciones en una segunda cuenta del usuario. El 26 de octubre se migraron Reservas e Inventario en una tercera cuenta, completando seis bases propias. Las bases están en la nube; los procesos permanecen locales.
 - **Presentación profesional:** se retiraron etiquetas repetidas de «práctica» en los flujos principales, manteniendo la independencia de los hoteles y los créditos de las imágenes. Un cambio de textos no convierte los datos de ejemplo en ofertas reales.
 
 ## 7. Seguridad implementada y JWT pendiente
@@ -132,7 +168,7 @@ Las contraseñas se guardan con **scrypt y sal aleatoria por usuario**, no como 
 
 Las APIs comprueban el propietario de reservas y avisos, y Auth limita intentos. Los errores y logs evitan mostrar contraseñas o cookies. El Gateway comprueba host y origen. Las credenciales PostgreSQL solo llegan al servicio dueño y las variables SMTP solo a Notificaciones.
 
-Los proyectos Supabase tienen esquemas privados y tablas con RLS; las políticas de acceso se asignan a su rol técnico. `hotels_auth_app`, `hotels_notifications_app`, `hotels_catalog_app` y `hotels_rooms_app` tienen permisos limitados sobre su propio dominio; no pueden crear objetos, administrar roles ni omitir RLS. `hotels_meta.service_owner` impide inicializar un dominio sobre la base del otro. El aprovisionamiento utilizó verificadores SCRAM; las contraseñas quedan en `.env`.
+Los proyectos Supabase tienen esquemas privados y tablas con RLS; las políticas de acceso se asignan a su rol técnico. `hotels_auth_app`, `hotels_notifications_app`, `hotels_catalog_app`, `hotels_rooms_app`, `hotels_reservations_app` y `hotels_availability_app` tienen permisos limitados sobre su propio dominio; no pueden crear objetos, administrar roles ni omitir RLS. `hotels_meta.service_owner` impide inicializar un dominio sobre la base del otro. El aprovisionamiento utilizó verificadores SCRAM; las contraseñas quedan en `.env`.
 
 **JWT todavía no está implementado.** El 22 de octubre se recomendó evaluarlo para el futuro despliegue distribuido: Auth firmaría con clave privada y los consumidores validarían con clave pública, comprobando firma, emisor, destinatario y vencimiento. Se necesitarían tokens de acceso cortos, renovación y revocación controladas, además de autorización en cada servicio. Esa conversación no fue una orden de sustituir las sesiones ni una implementación terminada.
 
@@ -142,7 +178,7 @@ Tampoco están implementadas la confirmación de titularidad del correo mediante
 
 ## 8. Reservas, disponibilidad y eventos
 
-Reservas obtiene por API la habitación y su tarifa, valida el hotel y capacidad, guarda la solicitud y pide una asignación a Inventario. El precio lo decide el servidor, no un importe enviado por JavaScript. Inventario verifica las noches en una transacción para evitar doble ocupación. La fecha de salida no ocupa noche; la llegada ese mismo día de otra reserva es válida.
+Reservas obtiene por API la habitación y su tarifa, valida el hotel y capacidad, guarda la solicitud y pide una asignación a Inventario. El precio lo decide el servidor, no un importe enviado por JavaScript. Inventario verifica las noches en una transacción para evitar doble ocupación. En PostgreSQL usa un bloqueo asesor transaccional por identificador de asignación y un bloqueo de fila por habitación; en SQLite conserva BEGIN IMMEDIATE. Reservas bloquea la transición por identificador y reutiliza su conexión hasta el commit. READ COMMITTED permite ver el estado más reciente después de esperar el bloqueo. La disponibilidad consulta las asignaciones superpuestas una vez y calcula las noches sin una consulta remota por noche. La fecha de salida no ocupa noche; la llegada ese mismo día de otra reserva es válida.
 
 Si Inventario no responde, la solicitud queda **Pendiente** y devuelve HTTP 202. Un trabajador reintenta para confirmarla o rechazarla por falta de cupos. Una cancelación interrumpida queda **Cancelando** y se completa al recuperar Inventario. El aviso corresponde a la transición confirmada. La liberación deja una marca que impide que una asignación tardía reactive una reserva cancelada.
 
@@ -184,7 +220,7 @@ El **23 de octubre**, en la organización gratuita `Dody` de la segunda cuenta, 
 - [hotels-catalog](https://supabase.com/dashboard/project/hliwjfyhbbmapjdlgltl), referencia `hliwjfyhbbmapjdlgltl`, esquema `hotels_catalog` y rol `hotels_catalog_app`.
 - [hotels-rooms](https://supabase.com/dashboard/project/auumbmanspknomzueqhh), referencia `auumbmanspknomzueqhh`, esquema `hotels_rooms` y rol `hotels_rooms_app`.
 
-El conector MCP seguía autorizado en la primera cuenta; la segunda se administró mediante el panel que abrió el usuario. Se comprobaron sus conexiones de sesión IPv4 en el propio panel, sin añadir IPv4 de pago. Los dos nuevos roles permiten SELECT e INSERT para consulta y migración inicial; no tienen UPDATE, DELETE, creación de objetos/roles ni bypass de RLS. Los esquemas no están expuestos a `anon` o `authenticated`. La Data API quedó desactivada al crear Habitaciones porque el backend usa PostgreSQL directamente.
+El conector MCP seguía autorizado en la primera cuenta; la segunda se administró mediante el panel que abrió el usuario. Se comprobaron sus conexiones de sesión IPv4 en el propio panel, sin añadir IPv4 de pago. Los dos roles de Catálogo y Habitaciones permiten SELECT e INSERT para consulta y migración inicial; no tienen UPDATE, DELETE, creación de objetos/roles ni bypass de RLS. Los esquemas no están expuestos a `anon` o `authenticated`. La Data API quedó desactivada al crear Habitaciones porque el backend usa PostgreSQL directamente.
 
 Supabase había creado `public.rls_auto_enable()` como función administrativa con permisos públicos de ejecución. Se inspeccionó su definición y se revocó EXECUTE a PUBLIC, anon y authenticated, manteniendo el disparador automático de RLS. La corrección queda en los SQL de ambos servicios.
 
@@ -192,17 +228,26 @@ Las migraciones nuevas se generaron con **Supabase CLI 2.121.0**, obtenida del p
 
 Se copiaron los tres hoteles y seis tipos existentes, manteniendo los identificadores, campos, tarifas y orden. PostgreSQL guarda `sort_order` porque no tiene el `rowid` de SQLite. Las APIs conservan el contrato: `hotelId` sigue teniendo esa capitalización y no se expone el campo interno de orden. No se crean claves foráneas entre las bases de Catálogo y Habitaciones.
 
+El **26 de octubre**, en la organización gratuita `Hotels` (`utdpmgiymdbumjsnxdyv`) de la tercera cuenta, se crearon exactamente dos proyectos:
+
+- [hotels-reservations](https://supabase.com/dashboard/project/fhqpyidzbbldxuskckyh), referencia `fhqpyidzbbldxuskckyh`, región `us-east-1`, esquema `hotels_reservations`, rol `hotels_reservations_app`.
+- [hotels-availability](https://supabase.com/dashboard/project/clubrnifkutcjsfvrxlk), referencia `clubrnifkutcjsfvrxlk`, región `us-west-2`, esquema `hotels_availability`, rol `hotels_availability_app`. La selección automática de Americas asignó Oregon a este segundo proyecto.
+
+Los dos tienen Data API desactivada, tablas con RLS y roles de aplicación limitados a SELECT/INSERT/UPDATE/DELETE en su propio dominio. Las migraciones `migrations/reservations/20261026152827_hotels_reservations_initial.sql` y `migrations/availability/20261026152830_hotels_availability_initial.sql` se generaron con Supabase CLI 2.121.0 y se aplicaron mediante conexión administrativa psycopg. No se ejecutó `db push` ni se registraron como historial remoto del CLI. Las contraseñas y la activación de login se aprovisionaron aparte. Se conservan dos reservas, cuatro eventos, seis filas de inventario y una asignación/liberación.
+
 Para reproducirlo en proyectos nuevos:
 
-1. Aplica como administrador `001_initial.sql` y `002_backend_access.sql` de `migrations/auth/` o `migrations/notifications/` en el proyecto que corresponda. Para Catálogo y Habitaciones aplica el archivo con fecha de su carpeta correspondiente. Los scripts crean roles `NOLOGIN`; su activación y contraseña se aprovisionan por un canal privado administrativo. El rol de ejecución no hace DDL.
+1. Aplica como administrador `001_initial.sql` y `002_backend_access.sql` de `migrations/auth/` o `migrations/notifications/` en el proyecto que corresponda. Para Catálogo, Habitaciones, Reservas o Inventario aplica el archivo con fecha de su carpeta correspondiente. Los scripts crean roles `NOLOGIN`; su activación y contraseña se aprovisionan por un canal privado administrativo. El rol de ejecución no hace DDL.
 2. Copia la URI de **Connect → Session pooler**, con el host que muestre el panel, usuario técnico del proyecto y puerto de sesión 5432. No deduzcas el host solo de la región ni uses la URL HTTP, `anon` o una clave publicable como conexión PostgreSQL.
-3. Completa `AUTH_DATABASE_URL`, `NOTIFICATIONS_DATABASE_URL`, `CATALOG_DATABASE_URL` y `ROOMS_DATABASE_URL` con sus conexiones diferentes y `sslmode=require`, codificando caracteres especiales de las contraseñas. Puede utilizarse `verify-full` con el certificado configurado. Son contraseñas de bases, no la contraseña de la cuenta Supabase.
+3. Completa `AUTH_DATABASE_URL`, `NOTIFICATIONS_DATABASE_URL`, `CATALOG_DATABASE_URL`, `ROOMS_DATABASE_URL`, `RESERVATIONS_DATABASE_URL` y `AVAILABILITY_DATABASE_URL` con sus conexiones diferentes y `sslmode=require`, codificando caracteres especiales de las contraseñas. Puede utilizarse `verify-full` con el certificado configurado. Son contraseñas de bases, no la contraseña de la cuenta Supabase.
 
 ```dotenv
 AUTH_DATABASE_URL=postgresql://USUARIO_AUTH.REFERENCIA_AUTH:CONTRASENA_CODIFICADA@HOST_DEL_PANEL:5432/postgres?sslmode=require
 NOTIFICATIONS_DATABASE_URL=postgresql://USUARIO_AVISOS.REFERENCIA_AVISOS:OTRA_CONTRASENA_CODIFICADA@HOST_DEL_PANEL:5432/postgres?sslmode=require
 CATALOG_DATABASE_URL=postgresql://USUARIO_CATALOGO.REFERENCIA_CATALOGO:OTRA_CONTRASENA_CODIFICADA@HOST_DEL_PANEL:5432/postgres?sslmode=require
 ROOMS_DATABASE_URL=postgresql://USUARIO_HABITACIONES.REFERENCIA_HABITACIONES:OTRA_CONTRASENA_CODIFICADA@HOST_DEL_PANEL:5432/postgres?sslmode=require
+RESERVATIONS_DATABASE_URL=postgresql://USUARIO_RESERVAS.REFERENCIA_RESERVAS:OTRA_CONTRASENA_CODIFICADA@HOST_DEL_PANEL:5432/postgres?sslmode=require
+AVAILABILITY_DATABASE_URL=postgresql://USUARIO_INVENTARIO.REFERENCIA_INVENTARIO:OTRA_CONTRASENA_CODIFICADA@HOST_DEL_PANEL:5432/postgres?sslmode=require
 ```
 
 Para copiar datos de SQLite en una instalación que aún no se haya migrado, detén Hotels y ejecuta:
@@ -220,6 +265,8 @@ Para Catálogo y Habitaciones se seleccionan explícitamente los servicios:
 .\.venv\Scripts\python.exe tools/migrate_supabase.py --services catalog rooms --apply
 .\.venv\Scripts\python.exe tools/migrate_supabase.py --services catalog rooms
 ```
+
+Para Reservas e Inventario se usa `--services availability reservations`, primero en modo de comprobación y después con `--apply` solo si se necesita copiar datos de otra instalación no migrada. Las seis bases actuales ya tienen sus datos. La repetición conserva los estados remotos avanzados de reserva, entrega y liberación; no reactiva asignaciones ni revierte cancelaciones.
 
 El valor por defecto sigue siendo Auth/Notificaciones para conservar compatibilidad. La migración del 23 guardó respaldo en `data/backups/supabase-20261023T073307Z-edc6b020/` y comprobó cero pendientes en Catálogo y Habitaciones. Se respaldó también la configuración antes de añadir las dos conexiones; las de Auth, Notificaciones y Gmail se conservaron.
 
@@ -314,12 +361,24 @@ Para exigir las cuatro conexiones al repetir la integración:
 .\.venv\Scripts\python.exe tests/integration.py --four-postgres
 ```
 
-### Verificación del 28 de octubre
+### Verificación inicial del colaborador el 28 de octubre
 
 - `tests/integration.py` en modo SQLite temporal, después de cada fusión: 57 de 57 comprobaciones aprobadas. `tests/migration.py`: 5 de 5.
 - `tests/database_config.py` no se pudo completar en el equipo de esa sesión porque no tenía `psycopg` instalado. Falla la prueba que exige el driver; no se debe a los cambios.
 - El frontend se revisó en navegador con la API simulada, a 390, 1024 y 1440 px. El reformateo de CSS/HTML conservó las 250 reglas CSS y la posición y los estilos calculados de los 260 elementos de la página.
 - No se ejecutó la modalidad PostgreSQL ni `INICIAR.cmd` con los seis servicios, porque no había `.env` en ese equipo. Antes de entregar, conviene repetir `tests/integration.py --four-postgres` y revisar el flujo completo con las bases reales.
+
+### Verificación conjunta e integración del 28 de octubre
+
+La revisión posterior sí contó con `.env` y psycopg: pasó la versión publicada con cuatro PostgreSQL (57 comprobaciones) y la combinación con seis PostgreSQL (67), más 11 pruebas de configuración y ocho de migración. Los seis health informaron PostgreSQL, el Gateway respondió HTTP 200 y se conservaron los datos originales después de limpiar solo los registros temporales. Las verificaciones iniciales del colaborador de la subsección anterior son históricas y no representan una limitación actual del equipo principal.
+
+Para exigir los seis PostgreSQL, con la instancia normal detenida:
+
+```powershell
+.\.venv\Scripts\python.exe tests/integration.py --six-postgres
+```
+
+La prueba se niega a usar bases compartidas mientras Hotels está abierto o existen eventos reales pendientes. Genera identificadores propios y fechas lejanas, desactiva SMTP y retira únicamente sus datos. La comparación previa y posterior confirmó los conteos originales. Las capturas, registros y la comprobación SMTP sin envío están en `rev/work`, fuera del repositorio.
 
 ### Integración continua y revisión de código
 
@@ -352,13 +411,13 @@ Se incluyen siete componentes en Compose: Gateway y seis servicios. Solo el Gate
 
 Para una futura validación, configura una clave `INTERNAL_API_KEY` de al menos 32 caracteres, conserva las conexiones y ejecuta `docker compose up --build`; abre <http://127.0.0.1:8080/>. `docker compose down` detiene los contenedores; no usar opciones que eliminen volúmenes si se deben conservar los datos. **La ejecución de Docker está pendiente**, aunque los archivos existan.
 
-El presupuesto acordado es gratuito. Tras migrar Catálogo y Habitaciones el 23 de octubre, quedan por migrar a bases remotas propias las SQLite de Reservas e Inventario. El destino será **frontend + Gateway + seis microservicios + seis bases independientes en la nube**. Subir únicamente las bases no aloja la aplicación completa.
+El presupuesto acordado es gratuito. Los seis servicios ya tienen sus bases remotas independientes en Supabase. El destino será **frontend + Gateway + seis microservicios + seis bases independientes en la nube**. Subir únicamente las bases no aloja la aplicación completa.
 
 Vercel se consideró para el frontend, con reescritura externa de `/api` hacia el Gateway para conservar el flujo del navegador; requerirá comprobar origen, hosts, HTTPS y cookies. Publicar HTML solo no habilita reservas.
 
 En la evaluación del **17 de octubre**, Render gratuito no era compatible con el diseño actual: bloqueo de SMTP saliente por 25/465/587, archivos efímeros y ausencia de discos persistentes para las SQLite. También se registraron suspensión por inactividad y una cuota de horas compartida por el espacio de trabajo. Las condiciones del proveedor deben volver a comprobarse antes de elegir alojamiento; esa investigación no fue un despliegue ni una contratación. Un monorepositorio puede alimentar despliegues por servicio, pero ejecutar todo con `start.py` en una sola instancia no prueba independencia de despliegue.
 
-**GitHub está autorizado para avances terminados y revisados; el despliegue público sigue pendiente.** No contratar planes ni crear recursos de pago. El proveedor definitivo del backend y de las dos bases restantes aún no está elegido.
+**GitHub está autorizado para avances terminados y revisados; el despliegue público sigue pendiente.** No contratar planes ni crear recursos de pago. El proveedor definitivo de alojamiento del frontend, Gateway y microservicios aún no está elegido; las seis bases ya están en Supabase.
 
 ## 15. Historial de avances
 
@@ -369,6 +428,7 @@ En la evaluación del **17 de octubre**, Render gratuito no era compatible con e
 - La documentación quedó centralizada en este archivo, con `README.md` como entrada breve. La orden de borrado fue bloqueada por la revisión automática de ejecución; se utilizó la alternativa autorizada de separar los sobrantes. Se movieron cinco documentos sustituidos y quince archivos de entregas anteriores (tres ZIP, cinco capturas y siete archivos del boceto) a `C:\Users\DODY\Documents\Codex\2026-10-15\rev\PARA_ELIMINAR_HOTELS_20261022`. La carpeta `outputs` antigua quedó vacía. No se borraron definitivamente esos archivos ni se trasladaron código activo, pruebas ejecutables, bases, respaldos o credenciales.
 
 - **23 de octubre:** Catálogo y Habitaciones pasaron a dos PostgreSQL propios de la segunda cuenta. Se generaron migraciones, roles limitados, respaldos y conexiones privadas, se conservaron los datos y el contrato de API y se aprobaron 128 comprobaciones. Continúan seis microservicios, con cuatro bases remotas y dos locales; no se desplegaron los procesos en la nube.
+- **26 de octubre:** migración de Reservas e Inventario a dos proyectos independientes de la tercera cuenta, conservando datos y completando seis bases Supabase.
 - **28 de octubre:** se auditó el código y se integraron mejoras de frontend y documentación mediante los pull requests #1 a #9. Ningún cambio modifica el esquema de las bases ni rompe el contrato existente:
   - **Mantenimiento:** CSS e `index.html` formateados (antes estaban en líneas únicas) y Google Fonts cargado con `<link>` y `preconnect`.
   - **Experiencia de uso:**
@@ -398,14 +458,14 @@ La sección final de entregables pide: código fuente; repositorio e historial G
 
 Este documento reúne contexto y material útil para varios de ellos; **no completa automáticamente la entrega formal**. Falta:
 
-1. Revisar el frontend con los servicios y las bases reales. El 28 de octubre se mejoraron estados de carga, errores, foco y presentación en escritorio y móvil, pero se probaron con la API simulada.
+1. Preparar la evidencia final del frontend: las pruebas de interfaz con servicios reales, la conexión a los seis PostgreSQL y los flujos de integración ya se verificaron el 28 de octubre; falta organizar el material de la demostración formal.
 2. Revisar el alcance de administración de hoteles, habitaciones y huéspedes respecto de la guía; las consultas actuales no son un CRUD administrativo completo.
 3. Elaborar los modelos de datos formales por servicio. La especificación OpenAPI ya está en `docs/openapi.yaml`.
 4. Preparar los dos diagramas solicitados y el documento final con decisiones, seguridad y comunicación asíncrona justificadas.
 5. Ejecutar y verificar Docker Compose y reproducibilidad en otra instalación.
 6. Capturar evidencias actuales y correo recibido, completar manual, presentación y demostración integral.
 7. Implementar, cuando se autorice, confirmación de correo y recuperación de contraseña; evaluar JWT antes de modificar la autenticación.
-8. Migrar las dos bases restantes, Reservas e Inventario, y seleccionar alojamiento gratuito compatible antes del despliegue público.
+8. Seleccionar alojamiento gratuito compatible y verificar el despliegue público del frontend, Gateway y microservicios. La migración de las seis bases a Supabase ya está completada.
 
 Los pagos aparecen como una posibilidad del sistema, no como un servicio adicional ya implementado. Tener seis microservicios supera el mínimo numérico, pero no garantiza la calificación de todos los criterios.
 

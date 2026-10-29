@@ -24,7 +24,13 @@ TABLES = {
              'outbox': ('id', ('id', 'body'))},
     'notifications': {'messages': ('id', ('id', 'user_id', 'recipient', 'subject', 'body', 'created'))},
     'catalog': {'hotels': ('id', ('id', 'document', 'sort_order'))},
-    'rooms': {'rooms': ('id', ('id', 'hotelId', 'name', 'capacity', 'price', 'sort_order'))}
+    'rooms': {'rooms': ('id', ('id', 'hotelId', 'name', 'capacity', 'price', 'sort_order'))},
+    'reservations': {
+        'reservations': ('id', ('id','user_id','hotel_id','checkin','checkout','guests','total','created','room_id','hotel_name','room_name')),
+        'outbox': ('id', ('id','body'))},
+    'availability': {
+        'inventory': ('room_id', ('room_id','total','sort_order')),
+        'allocations': ('reservation_id', ('reservation_id','room_id','checkin','checkout'))}
 }
 
 
@@ -51,10 +57,10 @@ def snapshot_sources(directory, backup=False, services=None):
                     if table == 'sessions':
                         query += ' WHERE expires>?'
                         parameters = (time.time(),)
-                    if name in ('catalog', 'rooms'):
+                    if name in ('catalog', 'rooms') or table == 'inventory':
                         query += ' ORDER BY rowid'
                     rows = [dict(row) for row in db.execute(query, parameters)]
-                    if name in ('catalog', 'rooms'):
+                    if name in ('catalog', 'rooms') or table == 'inventory':
                         for position, row in enumerate(rows):
                             row['sort_order'] = position
                     snapshots[name][table] = rows
@@ -89,7 +95,11 @@ ALLOWED_COLUMNS = {
     'outbox': {'id', 'body', 'attempts', 'next_try', 'delivered'},
     'messages': {'id', 'user_id', 'recipient', 'subject', 'body', 'status', 'created', 'attempts', 'next_try'},
     'hotels': {'id', 'document', 'sort_order'},
-    'rooms': {'id', 'hotelId', 'name', 'capacity', 'price', 'sort_order'}
+    'rooms': {'id', 'hotelId', 'name', 'capacity', 'price', 'sort_order'},
+    'reservations': {'id','user_id','hotel_id','checkin','checkout','guests','total','status','created',
+                     'room_id','hotel_name','room_name','inventory_synced'},
+    'inventory': {'room_id','total','sort_order'},
+    'allocations': {'reservation_id','room_id','checkin','checkout','status'}
 }
 
 
@@ -102,7 +112,7 @@ def main():
     load_environment()
     postgres.validate_configuration(require_services=options.services)
     if options.apply:
-        ports = {'auth':8101, 'notifications':8102, 'catalog':8104, 'rooms':8105}
+        ports = {'auth':8101, 'notifications':8102, 'catalog':8104, 'rooms':8105,'reservations':8103,'availability':8106}
         for port in (8080, *(ports[name] for name in options.services)):
             try:
                 probe = socket.create_connection(('127.0.0.1', port), timeout=.3)

@@ -97,7 +97,7 @@ def init_outbox(db):
     db.execute('CREATE TABLE IF NOT EXISTS outbox (id TEXT PRIMARY KEY, body TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_try DOUBLE PRECISION NOT NULL DEFAULT 0, delivered INTEGER NOT NULL DEFAULT 0)')
 
 def enqueue(db, event):
-    db.execute('INSERT INTO outbox(id, body) VALUES (?, ?)', (event['id'], json.dumps(event)))
+    db.execute('INSERT INTO outbox(id, body) VALUES (?, ?) ON CONFLICT(id) DO NOTHING', (event['id'], json.dumps(event)))
 
 def start_outbox(name):
     def worker():

@@ -4,6 +4,7 @@ import http.cookiejar
 import json
 import sqlite3
 import time
+import uuid
 from contextlib import closing
 import urllib.error
 import urllib.request
@@ -17,6 +18,11 @@ checks = []
 USE_POSTGRES = False
 POSTGRES_SERVICES = set()
 FIXTURE_USERS = set()
+RUN_TAG = uuid.uuid4().hex
+LEGACY_IDS = ('LEGACY-'+RUN_TAG+'-A', 'LEGACY-'+RUN_TAG+'-C')
+LEGACY_USER = 'legacy-'+RUN_TAG
+FIXTURE_ALLOCATION_IDS = set(LEGACY_IDS)
+TEST_DATE_BASE = dt.date(2100,1,1)+dt.timedelta(days=int(RUN_TAG[:6],16)%6000)
 def client():
     return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 def request(opener, path, data=None, headers=None):
@@ -58,7 +64,7 @@ def run_checks(data_dir):
     check(request(client(),'/api/auth/register',{'name':'Duplicado','email':email_a,'password':password})[0] == 409,'Correo duplicado rechazado')
     check(request(a,'/api/auth/logout',{}, {'Origin':'https://externo.invalid'})[0] == 403,'Origen externo rechazado')
     check(request(a,'/api/internal/events',{})[0] == 404,'Eventos internos no expuestos en gateway')
-    start = dt.date.today()+dt.timedelta(days=40)
+    start = TEST_DATE_BASE+dt.timedelta(days=40)
     end = start+dt.timedelta(days=3)
     payload = {'hotelId':'ghl-monteria','roomId':'ghl-monteria-principal','checkin':start.isoformat(),'checkout':end.isoformat(),'guests':2,'total':1,'email':'ajeno@example.test'}
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
@@ -96,6 +102,7 @@ def run_checks(data_dir):
     check(len(saved[0]) == 32 and len(saved[1]) == 64 and password not in saved,'Contraseña persistida con sal y scrypt')
     check(request(a,'/api/auth/logout',{})[0] == 200 and request(a,'/api/reservations')[0] == 401,'Cierre de sesión revoca acceso')
     advanced_checks(a,b,data_dir,password,email_a)
+    inventory_concurrency_checks(a,password,email_a)
     print(json.dumps({'passed':len(checks),'checks':checks},ensure_ascii=False,indent=2))
 
 
@@ -104,10 +111,12 @@ def available(opener,room,start,end):
     data=request(opener,f'/api/availability?checkin={start}&checkout={end}')[1]
     return next(r['available'] for r in data['availability'] if r['roomId']==room)
 
-def internal(port,path,data=None):
+def internal(port,path,data=None,opener=None):
+    if path in ('/internal/allocate','/internal/release') and data:
+        FIXTURE_ALLOCATION_IDS.add(data['reservationId'])
     body=json.dumps(data).encode() if data is not None else None
     req=urllib.request.Request(f'http://127.0.0.1:{port}'+path,data=body,headers={'X-Internal-Key':INTERNAL_KEY,'Content-Type':'application/json'})
-    try: response=urllib.request.urlopen(req,timeout=15)
+    try: response=(opener.open if opener else urllib.request.urlopen)(req,timeout=15)
     except urllib.error.HTTPError as error: response=error
     with response: return response.code,json.load(response)
 
@@ -134,7 +143,7 @@ def advanced_checks(a,b,data_dir,password,email_a):
     check(internal(18106,'/health')[1]['service']=='disponibilidad-inventario','Inventario tiene proceso y health propios')
     files={f.name for f in Path(data_dir).glob('*.sqlite3')}
     if USE_POSTGRES:
-        service_ports = {'auth':18101, 'notifications':18102, 'catalog':18104, 'rooms':18105}
+        service_ports = {'auth':18101, 'notifications':18102, 'reservations':18103, 'catalog':18104, 'rooms':18105,'availability':18106}
         sqlite_services = {'auth','notifications','catalog','rooms','reservations','availability'} - POSTGRES_SERVICES
         check({name+'.sqlite3' for name in sqlite_services} <= files
               and not {name+'.sqlite3' for name in POSTGRES_SERVICES} & files
@@ -142,15 +151,22 @@ def advanced_checks(a,b,data_dir,password,email_a):
               f'{len(POSTGRES_SERVICES)} PostgreSQL y {len(sqlite_services)} SQLite independientes, sin respaldo silencioso')
     else:
         check({'auth.sqlite3','notifications.sqlite3','reservations.sqlite3','catalog.sqlite3','rooms.sqlite3','availability.sqlite3'}<=files,'Seis bases de datos separadas')
-    migrated_start=dt.date.today()+dt.timedelta(days=100)
+    migrated_start=TEST_DATE_BASE+dt.timedelta(days=100)
     migrated_end=migrated_start+dt.timedelta(days=3)
     check(available(b,'ghl-monteria-principal',migrated_start,migrated_end)==0,'Reserva antigua confirmada bloquea el inventario migrado')
     check(internal(18103,'/internal/reconcile',{})[1]['pending']==0,'Repetir migración no duplica cupos ni deja operaciones pendientes')
-    with closing(sqlite3.connect(Path(data_dir)/'reservations.sqlite3')) as db:
-        old=db.execute("SELECT status,room_id,hotel_name,total FROM reservations WHERE id='LEGACY-A'").fetchone()
-        cancelled=db.execute("SELECT status FROM reservations WHERE id='LEGACY-C'").fetchone()
+    if 'reservations' in POSTGRES_SERVICES:
+        import postgres
+        with postgres.connect('reservations') as db:
+            row=db.execute('SELECT status,room_id,hotel_name,total FROM reservations WHERE id=?',(LEGACY_IDS[0],)).fetchone()
+            old=tuple(row[column] for column in ('status','room_id','hotel_name','total'))
+            cancelled=(db.execute('SELECT status FROM reservations WHERE id=?',(LEGACY_IDS[1],)).fetchone()['status'],)
+    else:
+        with closing(sqlite3.connect(Path(data_dir)/'reservations.sqlite3')) as db:
+            old=db.execute('SELECT status,room_id,hotel_name,total FROM reservations WHERE id=?',(LEGACY_IDS[0],)).fetchone()
+            cancelled=db.execute('SELECT status FROM reservations WHERE id=?',(LEGACY_IDS[1],)).fetchone()
     check(old==('Confirmada','ghl-monteria-principal','GHL Hotel Montería',1050000) and cancelled[0]=='Cancelada','Migración conserva reservas confirmadas, canceladas y sus importes')
-    future=dt.date.today()+dt.timedelta(days=65)
+    future=TEST_DATE_BASE+dt.timedelta(days=65)
     end=future+dt.timedelta(days=3)
     principal={'hotelId':'ghl-monteria','roomId':'ghl-monteria-principal','checkin':str(future),'checkout':str(end),'guests':2}
     check(request(b,'/api/reservations',{**principal,'hotelId':'sites-monteria'})[0]==400,'Reservas rechaza una habitación asociada a otro hotel')
@@ -190,6 +206,54 @@ def advanced_checks(a,b,data_dir,password,email_a):
     check(status()=='Cancelada','Reservas conserva su estado al reiniciar el proceso')
     request(b,'/api/auth/logout',{})
 
+def inventory_concurrency_checks(account,password,email):
+    """Dos procesos distintos comparten la misma base; el bloqueo Python no basta."""
+    CONTROLLER('start',18206)
+    start=TEST_DATE_BASE+dt.timedelta(days=150)
+    payload={'roomId':'ghl-monteria-principal','checkin':str(start),'checkout':str(start+dt.timedelta(days=3))}
+    ids=['TEST-'+RUN_TAG+'-'+str(index) for index in range(5)]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        results=list(pool.map(lambda pair:internal(pair[0],'/internal/allocate',{**payload,'reservationId':pair[1]}),[(18106,ids[0]),(18206,ids[1])]))
+    check(sorted(result[0] for result in results)==[201,409],'Dos procesos de Inventario comparten el bloqueo y no sobrevendan')
+    for rid in ids[:2]: internal(18106,'/internal/release',{'reservationId':rid})
+    same={**payload,'reservationId':ids[2]}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        results=list(pool.map(lambda port:internal(port,'/internal/allocate',same),(18106,18206)))
+    check(sorted(result[0] for result in results)==[200,201],'Dos instancias asignan el mismo identificador exactamente una vez')
+    internal(18206,'/internal/release',{'reservationId':ids[2]})
+    check(internal(18106,'/internal/allocate',same)[0]==409,'Una liberación en otra instancia impide reactivar la asignación')
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        allocated=pool.submit(internal,18106,'/internal/allocate',{**payload,'reservationId':ids[3]})
+        released=pool.submit(internal,18206,'/internal/release',{'reservationId':ids[3]})
+        codes=(allocated.result()[0],released.result()[0])
+    check(codes[0] in (201,409) and codes[1]==200 and internal(18106,'/internal/allocate',{**payload,'reservationId':ids[3]})[0]==409,
+          'Asignación y liberación simultáneas convergen a Liberada')
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        results=list(pool.map(lambda pair:internal(pair[0],'/internal/allocate',{**payload,'roomId':pair[1],'reservationId':ids[4]}),[(18106,'ghl-monteria-principal'),(18206,'sites-monteria-principal')]))
+    check(sorted(result[0] for result in results)==[201,409],'Un identificador no puede asignarse a habitaciones diferentes desde dos instancias')
+    internal(18106,'/internal/release',{'reservationId':ids[4]})
+    start=TEST_DATE_BASE+dt.timedelta(days=180)
+    code,data,_=request(client(),f'/api/availability?checkin={start}&checkout={start+dt.timedelta(days=30)}')
+    check(code==200 and len(data['availability'])==6,'La consulta de treinta noches funciona sin una consulta SQL por noche')
+    CONTROLLER('stop',18206)
+    if 'reservations' in POSTGRES_SERVICES:
+        import postgres
+        CONTROLLER('start',18203)
+        assert request(account,'/api/auth/login',{'email':email,'password':password})[0]==200
+        start=TEST_DATE_BASE+dt.timedelta(days=220)
+        code,data,_=request(account,'/api/reservations',{'roomId':'ghl-monteria-principal','checkin':str(start),'checkout':str(start+dt.timedelta(days=2)),'guests':2})
+        check(code==201,'Reserva confirmada antes de cancelar desde dos procesos')
+        rid=data['reservation']['id']
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            results=list(pool.map(lambda port:internal(port,'/reservations/'+rid+'/cancel',{},account),(18103,18203)))
+        check(all(result[0]==200 and result[1]['status']=='Cancelada' for result in results),'Dos instancias de Reservas cancelan simultáneamente sin errores')
+        check(available(account,'ghl-monteria-principal',start,start+dt.timedelta(days=2))==1,'La cancelación entre instancias libera el inventario una vez')
+        with postgres.connect('reservations') as db:
+            count=db.execute('SELECT COUNT(*) AS total FROM outbox WHERE id=?',('cancelled:'+rid,)).fetchone()['total']
+        check(count==1,'La cancelación concurrente conserva un único evento en outbox')
+        request(account,'/api/auth/logout',{})
+        CONTROLLER('stop',18203)
+
 
 def main():
     global INTERNAL_KEY,CONTROLLER,USE_POSTGRES,POSTGRES_SERVICES
@@ -197,30 +261,45 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--postgres',action='store_true',help='Usa las conexiones PostgreSQL de .env; limpia solo sus propias cuentas de prueba.')
     parser.add_argument('--four-postgres',action='store_true',help='Exige Auth, Notificaciones, Catálogo y Habitaciones en PostgreSQL.')
+    parser.add_argument('--six-postgres',action='store_true',help='Exige los seis servicios en bases PostgreSQL independientes.')
     options = parser.parse_args()
-    USE_POSTGRES=options.postgres or options.four_postgres
+    USE_POSTGRES=options.postgres or options.four_postgres or options.six_postgres
     root=Path(__file__).resolve().parents[1]
     if USE_POSTGRES:
         sys.path.insert(0,str(root)); sys.path.insert(0,str(root/'services'))
         from start import load_environment
         import postgres
         load_environment()
-        postgres.validate_configuration(require_both=True, require_services=tuple(postgres.SETTINGS) if options.four_postgres else ())
+        required=tuple(postgres.SETTINGS) if options.six_postgres else (('auth','notifications','catalog','rooms') if options.four_postgres else ())
+        postgres.validate_configuration(require_both=True, require_services=required)
         POSTGRES_SERVICES = {name for name in postgres.SETTINGS if postgres.database_url(name)}
-    for port in (18080,*PORTS):
+        # La instancia normal podría consumir los mismos eventos con SMTP habilitado.
+        for port in (8080,*range(8101,8107)):
+            with socket.socket() as probe:
+                if probe.connect_ex(('127.0.0.1',port))==0:
+                    raise SystemExit('Detén Hotels antes de las pruebas con PostgreSQL compartido.')
+        for name in ('auth','reservations'):
+            if name in POSTGRES_SERVICES:
+                with postgres.connect(name) as db:
+                    if db.execute('SELECT COUNT(*) AS total FROM outbox WHERE delivered=0').fetchone()['total']:
+                        raise SystemExit('Hay eventos reales pendientes; no se ejecutan pruebas para no consumirlos.')
+                    if name=='reservations' and db.execute("SELECT COUNT(*) AS total FROM reservations WHERE room_id='' OR inventory_synced=0 OR status IN ('Pendiente','Cancelando')").fetchone()['total']:
+                        raise SystemExit('Hay reservas reales por reconciliar; no se ejecutan pruebas sobre ellas.')
+    for port in (18080,*PORTS,18206,18203):
         with socket.socket() as probe:
             try: probe.bind(('127.0.0.1',port))
             except OSError: raise SystemExit('Puerto de pruebas ocupado: '+str(port)) from None
     with tempfile.TemporaryDirectory(prefix='hotels-tests-') as temp:
         # Fixture con el esquema anterior, sin leer ni alterar los datos del usuario.
-        with closing(sqlite3.connect(Path(temp)/'reservations.sqlite3')) as db:
-            db.execute('CREATE TABLE reservations (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,hotel_id TEXT NOT NULL,checkin TEXT NOT NULL,checkout TEXT NOT NULL,guests INTEGER NOT NULL,total INTEGER NOT NULL,status TEXT NOT NULL,created REAL NOT NULL)')
-            a=dt.date.today()+dt.timedelta(days=100)
-            b=a+dt.timedelta(days=3)
-            db.executemany('INSERT INTO reservations VALUES (?,?,?,?,?,?,?,?,?)',[
-                ('LEGACY-A','legacy-user','ghl-monteria',str(a),str(b),2,1050000,'Confirmada',time.time()),
-                ('LEGACY-C','legacy-user','sites-monteria',str(a),str(b),2,885000,'Cancelada',time.time())])
-            db.commit()
+        a=TEST_DATE_BASE+dt.timedelta(days=100)
+        b=a+dt.timedelta(days=3)
+        legacy_rows=[(LEGACY_IDS[0],LEGACY_USER,'ghl-monteria',str(a),str(b),2,1050000,'Confirmada',time.time()),
+                     (LEGACY_IDS[1],LEGACY_USER,'sites-monteria',str(a),str(b),2,885000,'Cancelada',time.time())]
+        if 'reservations' not in POSTGRES_SERVICES:
+            with closing(sqlite3.connect(Path(temp)/'reservations.sqlite3')) as db:
+                db.execute('CREATE TABLE reservations (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,hotel_id TEXT NOT NULL,checkin TEXT NOT NULL,checkout TEXT NOT NULL,guests INTEGER NOT NULL,total INTEGER NOT NULL,status TEXT NOT NULL,created REAL NOT NULL)')
+                db.executemany('INSERT INTO reservations VALUES (?,?,?,?,?,?,?,?,?)',legacy_rows)
+                db.commit()
         env=os.environ.copy()
         INTERNAL_KEY=secrets.token_urlsafe(48)
         env.update(HOTELS_DATA_DIR=temp,INTERNAL_API_KEY=INTERNAL_KEY,
@@ -228,13 +307,15 @@ def main():
             NOTIFICATIONS_DATABASE_URL=os.environ.get('NOTIFICATIONS_DATABASE_URL','') if USE_POSTGRES else '',
             CATALOG_DATABASE_URL=os.environ.get('CATALOG_DATABASE_URL','') if USE_POSTGRES else '',
             ROOMS_DATABASE_URL=os.environ.get('ROOMS_DATABASE_URL','') if USE_POSTGRES else '',
+            RESERVATIONS_DATABASE_URL=os.environ.get('RESERVATIONS_DATABASE_URL','') if USE_POSTGRES else '',
+            AVAILABILITY_DATABASE_URL=os.environ.get('AVAILABILITY_DATABASE_URL','') if USE_POSTGRES else '',
             SMTP_HOST='',SMTP_USER='',SMTP_PASSWORD='',SMTP_FROM='',
             GATEWAY_PORT='18080',PUBLIC_ORIGIN='http://127.0.0.1:18080',
             AUTH_URL='http://127.0.0.1:18101',NOTIFICATIONS_URL='http://127.0.0.1:18102',
             RESERVATIONS_URL='http://127.0.0.1:18103',CATALOG_URL='http://127.0.0.1:18104',
             ROOMS_URL='http://127.0.0.1:18105',AVAILABILITY_URL='http://127.0.0.1:18106',
             SERVICE_BIND='127.0.0.1',GATEWAY_BIND='127.0.0.1',COOKIE_SECURE='0',PYTHONDONTWRITEBYTECODE='1')
-        files={18101:'services/auth.py',18102:'services/notifications.py',18103:'services/reservations.py',18104:'services/catalog.py',18105:'services/rooms.py',18106:'services/availability.py',18080:'gateway.py'}
+        files={18101:'services/auth.py',18102:'services/notifications.py',18103:'services/reservations.py',18203:'services/reservations.py',18104:'services/catalog.py',18105:'services/rooms.py',18106:'services/availability.py',18206:'services/availability.py',18080:'gateway.py'}
         processes={}
         with (Path(temp)/'services.log').open('w+',encoding='utf-8') as logs:
             def control(action,port):
@@ -245,17 +326,21 @@ def main():
                     except subprocess.TimeoutExpired:p.kill();p.wait()
                 else:
                     child_env={**env,'PORT':str(port)}
-                    owner_keys = {18101:'AUTH_DATABASE_URL',18102:'NOTIFICATIONS_DATABASE_URL',18104:'CATALOG_DATABASE_URL',18105:'ROOMS_DATABASE_URL'}
-                    for key in ('AUTH_DATABASE_URL','NOTIFICATIONS_DATABASE_URL','CATALOG_DATABASE_URL','ROOMS_DATABASE_URL'):
+                    owner_keys = {18101:'AUTH_DATABASE_URL',18102:'NOTIFICATIONS_DATABASE_URL',18103:'RESERVATIONS_DATABASE_URL',18203:'RESERVATIONS_DATABASE_URL',18104:'CATALOG_DATABASE_URL',18105:'ROOMS_DATABASE_URL',18106:'AVAILABILITY_DATABASE_URL',18206:'AVAILABILITY_DATABASE_URL'}
+                    for key in ('AUTH_DATABASE_URL','NOTIFICATIONS_DATABASE_URL','CATALOG_DATABASE_URL','ROOMS_DATABASE_URL','RESERVATIONS_DATABASE_URL','AVAILABILITY_DATABASE_URL'):
                         if key != owner_keys.get(port): child_env.pop(key,None)
                     processes[port]=subprocess.Popen([sys.executable,str(root/files[port])],cwd=root,env=child_env,stdout=logs,stderr=logs)
                     def ready():
                         try:
-                            urllib.request.urlopen(f'http://127.0.0.1:{port}/health',timeout=6 if USE_POSTGRES and port in (18101,18102,18104,18105) else .3).close();return True
+                            urllib.request.urlopen(f'http://127.0.0.1:{port}/health',timeout=8 if USE_POSTGRES else .3).close();return True
                         except OSError:return False
-                    if not poll(ready,timeout=15):raise RuntimeError('No inició el servicio de pruebas '+str(port))
+                    if not poll(ready,timeout=40 if USE_POSTGRES else 15):raise RuntimeError('No inició el servicio de pruebas '+str(port))
             CONTROLLER=control
             try:
+                if 'reservations' in POSTGRES_SERVICES:
+                    with postgres.connect('reservations') as db:
+                        for row in legacy_rows:
+                            db.execute('INSERT INTO reservations(id,user_id,hotel_id,checkin,checkout,guests,total,status,created) VALUES (?,?,?,?,?,?,?,?,?)',row)
                 for port in (18104,18105,18106,18101,18102,18103,18080):control('start',port)
                 run_checks(temp)
             except Exception:
@@ -263,6 +348,18 @@ def main():
             finally:
                 for port in processes:control('stop',port)
                 if USE_POSTGRES:
+                    fixture_reservations=set(LEGACY_IDS)
+                    if 'reservations' in POSTGRES_SERVICES:
+                        with postgres.connect('reservations') as db:
+                            for uid in FIXTURE_USERS | {LEGACY_USER}:
+                                fixture_reservations.update(row['id'] for row in db.execute('SELECT id FROM reservations WHERE user_id=?',(uid,)).fetchall())
+                            for rid in fixture_reservations:
+                                db.execute('DELETE FROM outbox WHERE id IN (?,?)',('confirmed:'+rid,'cancelled:'+rid))
+                                db.execute('DELETE FROM reservations WHERE id=? AND user_id IN ('+','.join('?' for _ in FIXTURE_USERS | {LEGACY_USER})+')',(rid,*sorted(FIXTURE_USERS | {LEGACY_USER})))
+                    if 'availability' in POSTGRES_SERVICES:
+                        with postgres.connect('availability') as db:
+                            for rid in fixture_reservations | FIXTURE_ALLOCATION_IDS:
+                                db.execute('DELETE FROM allocations WHERE reservation_id=?',(rid,))
                     # Ninguna consulta de limpieza usa correos o IDs ajenos a esta ejecución.
                     with postgres.connect('notifications') as db:
                         for uid in FIXTURE_USERS:

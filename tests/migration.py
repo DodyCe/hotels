@@ -27,6 +27,41 @@ def user(identifier='fixture'):
 
 
 class Migration(unittest.TestCase):
+    def test_reservation_retry_does_not_reopen_cancelled_remote_state(self):
+        source = {'reservations':[dict(id='r',user_id='u',hotel_id='h',checkin='2030-01-01',checkout='2030-01-02',guests=2,total=100,status='Pendiente',created=1.25,room_id='room',hotel_name='Hotel',room_name='Doble',inventory_synced=0)]}
+        with closing(sqlite3.connect(':memory:')) as db:
+            db.row_factory=sqlite3.Row
+            db.execute('CREATE TABLE reservations(id TEXT PRIMARY KEY,user_id TEXT,hotel_id TEXT,checkin TEXT,checkout TEXT,guests INTEGER,total INTEGER,status TEXT,created REAL,room_id TEXT,hotel_name TEXT,room_name TEXT,inventory_synced INTEGER)')
+            db.execute('CREATE TABLE outbox(id TEXT PRIMARY KEY,body TEXT)')
+            with db: inspect_rows('reservations',source,db,apply=True)
+            with db: db.execute("UPDATE reservations SET status='Cancelada',inventory_synced=1")
+            with db: self.assertEqual(inspect_rows('reservations',source,db,apply=True)['reservations']['copiados'],0)
+            row=dict(db.execute('SELECT * FROM reservations').fetchone())
+            self.assertEqual((row['status'],row['inventory_synced'],row['total']),('Cancelada',1,100))
+
+    def test_inventory_retry_preserves_release_and_unknown_release_marker(self):
+        source={'allocations':[dict(reservation_id='r',room_id='room',checkin='2030-01-01',checkout='2030-01-02',status='Asignada'),
+                               dict(reservation_id='unknown',room_id='',checkin='',checkout='',status='Liberada')]}
+        with closing(sqlite3.connect(':memory:')) as db:
+            db.row_factory=sqlite3.Row
+            db.execute("CREATE TABLE allocations(reservation_id TEXT PRIMARY KEY,room_id TEXT,checkin TEXT,checkout TEXT,status TEXT)")
+            db.execute('CREATE TABLE inventory(room_id TEXT PRIMARY KEY,total INTEGER,sort_order INTEGER)')
+            with db: inspect_rows('availability',source,db,apply=True)
+            with db: db.execute("UPDATE allocations SET status='Liberada' WHERE reservation_id='r'")
+            with db: self.assertEqual(inspect_rows('availability',source,db,apply=True)['allocations']['copiados'],0)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM allocations WHERE status='Liberada'").fetchone()[0],2)
+
+    def test_inventory_snapshot_adds_order_without_changing_allocations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            with closing(sqlite3.connect(root/'availability.sqlite3')) as db:
+                db.executescript('CREATE TABLE inventory(room_id TEXT PRIMARY KEY,total INTEGER);CREATE TABLE allocations(reservation_id TEXT PRIMARY KEY,room_id TEXT,checkin TEXT,checkout TEXT,status TEXT);')
+                db.executemany('INSERT INTO inventory VALUES (?,?)',[('z',1),('a',2)])
+                db.execute("INSERT INTO allocations VALUES ('unknown','','','','Liberada')")
+                db.commit()
+            snapshot=snapshot_sources(root,backup=True,services=['availability'])['availability']
+            self.assertEqual([(row['room_id'],row['sort_order']) for row in snapshot['inventory']],[('z',0),('a',1)])
+            self.assertNotIn('sort_order',snapshot['allocations'][0])
     def test_catalog_and_rooms_keep_original_order_without_changing_source(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

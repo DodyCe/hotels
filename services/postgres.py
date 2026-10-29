@@ -12,10 +12,12 @@ except ImportError:
 
 INTEGRITY_ERRORS = (sqlite3.IntegrityError,) + ((psycopg.IntegrityError,) if psycopg else ())
 SETTINGS = {'auth': 'AUTH_DATABASE_URL', 'notifications': 'NOTIFICATIONS_DATABASE_URL',
-            'catalog': 'CATALOG_DATABASE_URL', 'rooms': 'ROOMS_DATABASE_URL'}
+            'catalog': 'CATALOG_DATABASE_URL', 'rooms': 'ROOMS_DATABASE_URL',
+            'reservations': 'RESERVATIONS_DATABASE_URL', 'availability': 'AVAILABILITY_DATABASE_URL'}
 SCHEMAS = {name: 'hotels_' + name for name in SETTINGS}
 TABLES = {'auth': ('users', 'sessions', 'outbox'), 'notifications': ('messages',),
-          'catalog': ('hotels',), 'rooms': ('rooms',)}
+          'catalog': ('hotels',), 'rooms': ('rooms',),
+          'reservations': ('reservations', 'outbox'), 'availability': ('inventory', 'allocations')}
 
 
 def database_url(name):
@@ -81,6 +83,8 @@ def connect(name):
         raise ValueError('Las bases remotas requieren TLS: usa sslmode=require o verify-full.')
     try:
         with psycopg.connect(value, connect_timeout=5, row_factory=dict_row, sslmode=mode) as connection:
+            if name in ('reservations','availability'):
+                connection.isolation_level = psycopg.IsolationLevel.READ_COMMITTED
             # Esquema constante elegido por código, nunca por datos de una petición.
             connection.execute('SET search_path TO ' + SCHEMAS[name] + ', pg_catalog')
             yield Database(connection)
