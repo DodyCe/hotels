@@ -16,16 +16,56 @@ const addDays = (iso, days) => { const date = new Date(iso + 'T12:00:00'); date.
 const today = hotelToday();
 $('#checkin').value = addDays(today, 7); $('#checkout').value = addDays(today, 10); $('#checkin').min = today;
 const state = { checkin: $('#checkin').value, checkout: $('#checkout').value, guests: 2, filter: 'all', sort: 'recommended', maxPrice: 0, selected: hotelCatalog[0].id, availability: {}, roomChoice: {}, user: null, online: false };
-let toastTimer;
+let toastTimer, toastLeaveTimer, totalFrame, lastTotal = null;
 let modalOpener = null;
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const revealedCards = new Set();
+const revealObserver = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => entries.forEach((entry) => {
+  if (!entry.isIntersecting) return;
+  entry.target.classList.add('is-visible');
+  if (entry.target.dataset.id) revealedCards.add(entry.target.dataset.id);
+  revealObserver.unobserve(entry.target);
+}), { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }) : null;
+function reveal(element, index = 0) {
+  if (!revealObserver || reduceMotion()) return;
+  element.dataset.reveal = ''; element.style.setProperty('--i', index); revealObserver.observe(element);
+}
+function restartAnimation(element, className) {
+  element.classList.remove(className); void element.offsetWidth; element.classList.add(className);
+}
+function animateTotal(to) {
+  const el = $('#total'), from = lastTotal; lastTotal = to;
+  const paint = (value) => { el.innerHTML = `${money(value)} <small>COP</small>`; };
+  cancelAnimationFrame(totalFrame);
+  if (from === null || from === to || reduceMotion()) return paint(to);
+  const start = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - start) / 450);
+    paint(Math.round(from + (to - from) * (1 - (1 - t) ** 3)));
+    if (t < 1) totalFrame = requestAnimationFrame(step);
+  };
+  totalFrame = requestAnimationFrame(step);
+}
+// Reacomoda las tarjetas con una transición cuando cambian filtros u orden.
+function renderWithTransition() {
+  if (document.startViewTransition && !reduceMotion()) document.startViewTransition(render); else render();
+}
 
 function hideToast() {
   const el = $('#toast'); clearTimeout(toastTimer);
-  if (el.hidePopover && el.matches(':popover-open')) el.hidePopover();
-  el.hidden = true;
+  if (el.hidden) return;
+  const finish = () => {
+    if (el.hidePopover && el.matches(':popover-open')) el.hidePopover();
+    el.hidden = true; el.classList.remove('leaving');
+  };
+  clearTimeout(toastLeaveTimer);
+  if (reduceMotion()) return finish();
+  el.classList.add('leaving');
+  toastLeaveTimer = setTimeout(finish, 200);
 }
 function toast(message, type = 'info') {
   const el = $('#toast');
+  clearTimeout(toastLeaveTimer);
   el.className = `toast toast-${type}`; $('#toast-message').textContent = '';
   el.hidden = false;
   // Como popover queda en la capa superior, visible también sobre el modal abierto.
@@ -71,11 +111,16 @@ function render() {
   const results = visibleHotels();
   if (!results.some((h) => h.id === state.selected)) state.selected = results[0]?.id || null;
   $('#result-description').textContent = `${results.length} ${results.length === 1 ? 'alojamiento disponible' : 'alojamientos disponibles'} · ${dateText(state.checkin)} – ${dateText(state.checkout)} · ${state.guests} ${state.guests === 1 ? 'adulto' : 'adultos'}`;
-  $('#hotel-list').innerHTML = results.length ? results.map((h) => `<article class="hotel-card ${h.id === state.selected ? 'selected' : ''}"><div class="hotel-image"><img src="${h.image}" alt="Foto ilustrativa de ${h.photographer}; no corresponde a ${h.name}" loading="lazy" referrerpolicy="no-referrer"><span class="hotel-badge">${h.badge}</span><a class="photo-credit" href="${h.photoPage}" target="_blank" rel="noopener noreferrer">Foto ilustrativa · ${h.photographer} / Unsplash ↗</a></div><div class="hotel-content"><div class="hotel-topline"><span class="hotel-location">Montería · ${h.area}</span><span class="local-badge">Montería</span></div><h3>${h.name}</h3><p class="hotel-address">${h.address}</p><p class="hotel-description">${h.description}</p><a class="official-link" href="${h.source}" target="_blank" rel="noopener noreferrer">Información oficial del hotel ↗</a><label class="room-picker">ELIGE TU HABITACIÓN<select data-room-hotel="${h.id}" aria-label="Habitación en ${h.name}">${h.roomOptions.map((r) => `<option value="${r.id}" ${r.id === h.roomId ? 'selected' : ''}>${r.name} · ${money(r.price)}/noche</option>`).join('')}</select></label><p class="room-type">Hasta ${h.capacity} adultos</p><div class="amenities">${h.amenities.map((a) => `<span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>${a}</span>`).join('')}</div><div class="hotel-bottom"><div><p class="price-label">POR NOCHE</p><div class="price">${money(h.price)} <small>/ noche</small></div><span class="availability">Disponible para tus fechas</span></div><button class="select-room" data-hotel="${h.id}" aria-pressed="${h.id === state.selected}" aria-label="${h.id === state.selected ? 'Habitación seleccionada en ' : 'Elegir habitación en '}${h.name}">${h.id === state.selected ? 'Seleccionada <span>✓</span>' : 'Elegir habitación <span>↗</span>'}</button></div></div></article>`).join('') : '<div class="empty"><strong>No encontramos habitaciones con estos criterios.</strong><p>Prueba otras fechas, menos huéspedes, un precio máximo mayor o el filtro «Todos los hoteles».</p></div>';
+  $('#hotel-list').querySelectorAll('[data-reveal]:not(.is-visible)').forEach((card) => revealObserver?.unobserve(card));
+  $('#hotel-list').innerHTML = results.length ? results.map((h) => `<article class="hotel-card ${h.id === state.selected ? 'selected' : ''}" data-id="${h.id}"><div class="hotel-image"><img src="${h.image}" alt="Foto ilustrativa de ${h.photographer}; no corresponde a ${h.name}" loading="lazy" referrerpolicy="no-referrer"><span class="hotel-badge">${h.badge}</span><a class="photo-credit" href="${h.photoPage}" target="_blank" rel="noopener noreferrer">Foto ilustrativa · ${h.photographer} / Unsplash ↗</a></div><div class="hotel-content"><div class="hotel-topline"><span class="hotel-location">Montería · ${h.area}</span><span class="local-badge">Montería</span></div><h3>${h.name}</h3><p class="hotel-address">${h.address}</p><p class="hotel-description">${h.description}</p><a class="official-link" href="${h.source}" target="_blank" rel="noopener noreferrer">Información oficial del hotel ↗</a><label class="room-picker">ELIGE TU HABITACIÓN<select data-room-hotel="${h.id}" aria-label="Habitación en ${h.name}">${h.roomOptions.map((r) => `<option value="${r.id}" ${r.id === h.roomId ? 'selected' : ''}>${r.name} · ${money(r.price)}/noche</option>`).join('')}</select></label><p class="room-type">Hasta ${h.capacity} adultos</p><div class="amenities">${h.amenities.map((a) => `<span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>${a}</span>`).join('')}</div><div class="hotel-bottom"><div><p class="price-label">POR NOCHE</p><div class="price">${money(h.price)} <small>/ noche</small></div><span class="availability">Disponible para tus fechas</span></div><button class="select-room" data-hotel="${h.id}" aria-pressed="${h.id === state.selected}" aria-label="${h.id === state.selected ? 'Habitación seleccionada en ' : 'Elegir habitación en '}${h.name}">${h.id === state.selected ? 'Seleccionada <span>✓</span>' : 'Elegir habitación <span>↗</span>'}</button></div></div></article>`).join('') : '<div class="empty"><strong>No encontramos habitaciones con estos criterios.</strong><p>Prueba otras fechas, menos huéspedes, un precio máximo mayor o el filtro «Todos los hoteles».</p></div>';
   $('#hotel-list').querySelectorAll('img').forEach((image) => image.addEventListener('error', () => {
     image.hidden = true;
     const fallback = document.createElement('span'); fallback.className = 'no-photo'; fallback.textContent = 'Fotografía de referencia no disponible sin conexión.'; image.parentElement.prepend(fallback);
   }, {once:true}));
+  $('#hotel-list').querySelectorAll('.hotel-card').forEach((card, index) => {
+    card.style.viewTransitionName = `hotel-${card.dataset.id}`;
+    if (!revealedCards.has(card.dataset.id)) reveal(card, index);
+  });
   const selected = hotels.find((h) => h.id === state.selected);
   ['.selected-hotel','.booking-details','.price-lines','.total'].forEach((selector) => { $(selector).hidden = !selected; });
   updateButton();
@@ -85,7 +130,7 @@ function render() {
     $('#summary-checkin').textContent = dateText(state.checkin); $('#summary-checkout').textContent = dateText(state.checkout);
     $('#summary-guests').textContent = `${state.guests} ${state.guests === 1 ? 'adulto' : 'adultos'}`;
     $('#night-label').textContent = `${money(selected.price)} × ${nights()} ${nights() === 1 ? 'noche' : 'noches'}`;
-    $('#subtotal').textContent = money(selected.price*nights()); $('#total').innerHTML = `${money(selected.price*nights())} <small>COP</small>`;
+    $('#subtotal').textContent = money(selected.price*nights()); animateTotal(selected.price*nights());
   }
 }
 async function refreshAvailability() {
@@ -106,7 +151,7 @@ async function refreshAvailability() {
 function openModal(html) {
   if (!$('#modal').open) modalOpener = document.activeElement;
   $('#modal-content').innerHTML = html;
-  if (!$('#modal').open) $('#modal').showModal();
+  if (!$('#modal').open) $('#modal').showModal(); else restartAnimation($('#modal-content'), 'swap');
   const target = $('#modal-content input, #modal-content select') || $('#modal-content h2');
   if (target) { if (target.tagName === 'H2') target.tabIndex = -1; target.focus(); }
 }
@@ -226,14 +271,15 @@ async function showNotifications() {
     $('#refresh-notifications').addEventListener('click', showNotifications);
   } catch (error) { openModal(`<h2>Notificaciones</h2><p>${escapeHTML(error.message)}</p>`); }
 }
-$('#hotel-list').addEventListener('click', (event) => { const button = event.target.closest('[data-hotel]'); if (!button) return; state.selected = button.dataset.hotel; render(); toast('Habitación seleccionada. Revisa el resumen de tu estancia.'); });
+$('#hotel-list').addEventListener('click', (event) => { const button = event.target.closest('[data-hotel]'); if (!button) return; state.selected = button.dataset.hotel; render(); restartAnimation($('.booking'), 'pulse'); toast('Habitación seleccionada. Revisa el resumen de tu estancia.'); });
 $('#hotel-list').addEventListener('change', (event) => {
   const selector = event.target.closest('[data-room-hotel]'); if (!selector) return;
-  state.roomChoice[selector.dataset.roomHotel] = selector.value; state.selected = selector.dataset.roomHotel; render();
+  state.roomChoice[selector.dataset.roomHotel] = selector.value; state.selected = selector.dataset.roomHotel; render(); restartAnimation($('.booking'), 'pulse');
 });
-$('.filters').addEventListener('click', (event) => { const button = event.target.closest('[data-filter]'); if (!button) return; state.filter = button.dataset.filter; document.querySelectorAll('[data-filter]').forEach((b) => { b.classList.toggle('active',b === button); b.setAttribute('aria-pressed',String(b === button)); }); render(); });
-$('#sort').addEventListener('change', (event) => { state.sort = event.target.value; render(); });
-$('#max-price').addEventListener('change', (event) => { state.maxPrice = Number(event.target.value); render(); });
+$('.filters').addEventListener('click', (event) => { const button = event.target.closest('[data-filter]'); if (!button) return; state.filter = button.dataset.filter; document.querySelectorAll('[data-filter]').forEach((b) => { b.classList.toggle('active',b === button); b.setAttribute('aria-pressed',String(b === button)); }); renderWithTransition(); });
+$('#sort').addEventListener('change', (event) => { state.sort = event.target.value; renderWithTransition(); });
+$('#max-price').addEventListener('change', (event) => { state.maxPrice = Number(event.target.value); renderWithTransition(); });
+reveal($('.sources'));
 $('#search-form').addEventListener('submit', async (event) => {
   event.preventDefault(); const a = $('#checkin').value, b = $('#checkout').value;
   const length = (Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000;

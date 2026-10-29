@@ -1348,3 +1348,109 @@ dialog .mail-body .mail-footer {
   line-height: 1.6;
   color: var(--muted);
 }
+
+/* Movimiento: modal, avisos, resumen, tarjetas y reacomodo de resultados. */
+dialog {
+  opacity: 0;
+  transform: translateY(10px) scale(.98);
+  transition: opacity .22s ease, transform .26s cubic-bezier(.2, .7, .2, 1), overlay .26s allow-discrete, display .26s allow-discrete;
+}
+
+dialog[open] {
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  dialog[open] {
+    opacity: 0;
+    transform: translateY(10px) scale(.98);
+  }
+}
+
+dialog::backdrop {
+  background-color: transparent;
+  transition: background-color .26s ease, overlay .26s allow-discrete, display .26s allow-discrete;
+}
+
+dialog[open]::backdrop {
+  background-color: #112c27a8;
+}
+
+@starting-style {
+  dialog[open]::backdrop {
+    background-color: transparent;
+  }
+}
+
+#modal-content.swap {
+  animation: hotels-fade .2s ease;
+}
+
+.toast {
+  translate: 0 0;
+  transition: opacity .22s ease, translate .26s cubic-bezier(.2, .7, .2, 1);
+}
+
+.toast.leaving {
+  opacity: 0;
+  translate: 0 12px;
+}
+
+@starting-style {
+  .toast {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+
+@keyframes hotels-pulse {
+  from {
+    box-shadow: 0 0 0 0 #d7684966;
+  }
+
+  to {
+    box-shadow: 0 0 0 14px #d7684900;
+  }
+}
+
+.booking.pulse {
+  animation: hotels-pulse .7s ease-out;
+}
+
+.hotel-card {
+  transition: opacity .5s ease, translate .5s cubic-bezier(.2, .7, .2, 1), transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+  transition-delay: calc(var(--i, 0) * 70ms), calc(var(--i, 0) * 70ms), 0s, 0s, 0s;
+}
+
+@media (hover: hover) {
+  .hotel-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 30px #173f3b14;
+  }
+}
+
+.sources {
+  transition: opacity .5s ease, translate .5s cubic-bezier(.2, .7, .2, 1);
+}
+
+[data-reveal]:not(.is-visible) {
+  opacity: 0;
+  translate: 0 16px;
+}
+
+::view-transition-group(*) {
+  animation-duration: .3s;
+  animation-timing-function: cubic-bezier(.2, .7, .2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog::backdrop {
+    transition: none;
+  }
+
+  [data-reveal]:not(.is-visible) {
+    opacity: 1;
+    translate: none;
+  }
+}
