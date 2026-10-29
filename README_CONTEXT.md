@@ -42,6 +42,9 @@ hotels/
   tools/                    Comprobación SMTP y migración de datos
   tests/                    Pruebas ejecutables del proyecto
   docs/openapi.yaml         Especificación OpenAPI 3.1 de la API pública
+  .github/workflows/ci.yml  Integración continua: lint, pruebas y frontend
+  requirements-dev.txt      Herramientas de desarrollo Python (ruff, pre-commit)
+  package.json              ESLint para el frontend (solo desarrollo)
   data/                     Bases SQLite, clave interna y respaldos privados
 ```
 
@@ -318,6 +321,31 @@ Para exigir las cuatro conexiones al repetir la integración:
 - El frontend se revisó en navegador con la API simulada, a 390, 1024 y 1440 px. El reformateo de CSS/HTML conservó las 250 reglas CSS y la posición y los estilos calculados de los 260 elementos de la página.
 - No se ejecutó la modalidad PostgreSQL ni `INICIAR.cmd` con los seis servicios, porque no había `.env` en ese equipo. Antes de entregar, conviene repetir `tests/integration.py --four-postgres` y revisar el flujo completo con las bases reales.
 
+### Integración continua y revisión de código
+
+GitHub Actions (`.github/workflows/ci.yml`) se ejecuta en cada pull request y en cada push a `main`. Tiene tres trabajos:
+
+1. **Lint:** ejecuta pre-commit sobre todo el repositorio. Incluye `ruff` para Python, la validación de YAML y JSON, marcadores de conflicto, archivos grandes y claves privadas.
+2. **Pruebas:** ejecuta `tests/integration.py` en SQLite temporal, `tests/database_config.py` y `tests/migration.py`. No usa las bases de Supabase ni el `.env`.
+3. **Frontend:** ejecuta ESLint sobre `web/` y `node --check`.
+
+Configuración:
+- `ruff.toml` aplica las reglas de errores reales: nombres indefinidos, imports sin uso, comparaciones y excepciones. Respeta el estilo compacto del proyecto (`if x: return y`, `a(); b()`).
+- `eslint.config.mjs` usa las reglas recomendadas con globales de navegador.
+- `.editorconfig` fija UTF-8, LF y la indentación.
+
+Para revisar localmente antes de subir:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\pre-commit.exe install
+.\.venv\Scripts\ruff.exe check .
+npm ci
+npm run lint
+```
+
+Node solo se usa para ESLint; la web no depende de Node para funcionar. Las versiones de las herramientas están fijadas en `requirements-dev.txt`, `package.json` y `package-lock.json`.
+
 ## 14. Docker y alojamiento futuro
 
 Se incluyen siete componentes en Compose: Gateway y seis servicios. Solo el Gateway publica un puerto al anfitrión; las SQLite usan volúmenes separados. Las conexiones PostgreSQL y SMTP se asignan únicamente a sus servicios correspondientes. La imagen ejecuta con un usuario sin privilegios.
@@ -341,7 +369,7 @@ En la evaluación del **17 de octubre**, Render gratuito no era compatible con e
 - La documentación quedó centralizada en este archivo, con `README.md` como entrada breve. La orden de borrado fue bloqueada por la revisión automática de ejecución; se utilizó la alternativa autorizada de separar los sobrantes. Se movieron cinco documentos sustituidos y quince archivos de entregas anteriores (tres ZIP, cinco capturas y siete archivos del boceto) a `C:\Users\DODY\Documents\Codex\2026-10-15\rev\PARA_ELIMINAR_HOTELS_20261022`. La carpeta `outputs` antigua quedó vacía. No se borraron definitivamente esos archivos ni se trasladaron código activo, pruebas ejecutables, bases, respaldos o credenciales.
 
 - **23 de octubre:** Catálogo y Habitaciones pasaron a dos PostgreSQL propios de la segunda cuenta. Se generaron migraciones, roles limitados, respaldos y conexiones privadas, se conservaron los datos y el contrato de API y se aprobaron 128 comprobaciones. Continúan seis microservicios, con cuatro bases remotas y dos locales; no se desplegaron los procesos en la nube.
-- **28 de octubre:** se auditó el código y se integraron mejoras de frontend y documentación mediante los pull requests #1 a #6. Ningún cambio modifica el esquema de las bases ni rompe el contrato existente:
+- **28 de octubre:** se auditó el código y se integraron mejoras de frontend y documentación mediante los pull requests #1 a #7. Ningún cambio modifica el esquema de las bases ni rompe el contrato existente:
   - **Mantenimiento:** CSS e `index.html` formateados (antes estaban en líneas únicas) y Google Fonts cargado con `<link>` y `preconnect`.
   - **Experiencia de uso:**
     - Imagen principal con `srcset` y confirmación antes de cancelar una reserva.
@@ -351,6 +379,7 @@ En la evaluación del **17 de octubre**, Render gratuito no era compatible con e
     - Filtro de precio, resumen en «Mi cuenta», reservas agrupadas por estado y notificaciones con formato de correo.
   - **Correcciones:** el buscador calcula «hoy» con la hora de Montería, igual que el servidor; Notificaciones importa `hashlib` de forma normal; `/auth/me` agrega `created`.
   - **Documentación:** especificación OpenAPI en `docs/openapi.yaml`.
+  - **Calidad:** integración continua en GitHub Actions, ruff, pre-commit, ESLint, `.editorconfig` y `requirements-dev.txt`. Ruff detectó un import sin uso en Notificaciones, que se eliminó.
 
 Commits publicados y comprobados el 17 de octubre en `main`:
 

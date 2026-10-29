@@ -1,6 +1,5 @@
 """Notificaciones: resuelve destinatarios en Auth y entrega por SMTP configurable."""
 import hashlib
-import json
 import logging
 import os
 import smtplib
