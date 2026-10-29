@@ -1,0 +1,557 @@
+openapi: 3.1.0
+info:
+  title: Hotels · Comunicación interna
+  version: 1.1.0
+  description: Referencia para servicios internos. X-Internal-Key es una credencial privada, nunca se entrega al navegador.
+    El Gateway no expone estas rutas. El visor no permite ejecutar operaciones internas.
+security:
+- InternalKey: []
+paths:
+  /internal/allocate:
+    post:
+      summary: Asignar un cupo de forma idempotente
+      operationId: post_internal_allocate
+      servers:
+      - url: http://127.0.0.1:8106
+      responses:
+        '201':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  allocated:
+                    type: boolean
+                  duplicate:
+                    type: boolean
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Clave interna incorrecta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Estado incompatible o sin cupos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '200':
+          description: Asignación ya existente, sin duplicar cupos.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  allocated:
+                    type: boolean
+                  duplicate:
+                    type: boolean
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reservationId:
+                  type: string
+                  maxLength: 160
+                roomId:
+                  type: string
+                  maxLength: 120
+                checkin:
+                  type: string
+                  format: date
+                checkout:
+                  type: string
+                  format: date
+              required:
+              - reservationId
+              - roomId
+              - checkin
+              - checkout
+  /internal/release:
+    post:
+      summary: Liberar o dejar una marca que impide asignaciones tardías
+      operationId: post_internal_release
+      servers:
+      - url: http://127.0.0.1:8106
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  released:
+                    type: boolean
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Clave interna incorrecta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Estado incompatible o sin cupos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reservationId:
+                  type: string
+                  maxLength: 160
+              required:
+              - reservationId
+  /internal/inventory:
+    post:
+      summary: Asegurar el inventario inicial de una habitación sin sobrescribir unidades existentes
+      operationId: post_internal_inventory
+      servers:
+      - url: http://127.0.0.1:8106
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  inventory:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      roomId:
+                        type: string
+                        maxLength: 120
+                      total:
+                        type: integer
+                        minimum: 1
+                        maximum: 1000
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Clave interna incorrecta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Estado incompatible o sin cupos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                roomId:
+                  type: string
+                  maxLength: 120
+                total:
+                  type: integer
+                  minimum: 1
+                  maximum: 1000
+              required:
+              - roomId
+              - total
+  /internal/reconcile:
+    post:
+      summary: Recuperar reservas y cancelaciones pendientes
+      operationId: post_internal_reconcile
+      servers:
+      - url: http://127.0.0.1:8103
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  pending:
+                    type: integer
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Clave interna incorrecta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Estado incompatible o sin cupos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: {}
+  /internal/users/{userId}:
+    get:
+      summary: Resolver datos públicos del destinatario en Auth
+      operationId: get_internal_users_userId
+      servers:
+      - url: http://127.0.0.1:8101
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Clave interna incorrecta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Estado incompatible o sin cupos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+  /internal/events:
+    post:
+      summary: Recibir un evento y resolver el correo en Auth
+      operationId: post_internal_events
+      servers:
+      - url: http://127.0.0.1:8102
+      responses:
+        '202':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  accepted:
+                    type: boolean
+                  duplicate:
+                    type: boolean
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Clave interna incorrecta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Estado incompatible o sin cupos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                id:
+                  type: string
+                  maxLength: 160
+                userId:
+                  type: string
+                  maxLength: 120
+                kind:
+                  type: string
+                  enum:
+                  - welcome
+                  - reservation.confirmed
+                  - reservation.cancelled
+                payload:
+                  type: object
+              required:
+              - id
+              - userId
+              - kind
+              - payload
+  /auth/me:
+    get:
+      summary: Validar sesión por API, con clave interna y cookie del usuario
+      operationId: get_auth_me
+      servers:
+      - url: http://127.0.0.1:8101
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Clave interna incorrecta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Estado incompatible o sin cupos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - InternalKey: []
+        session: []
+  /health:
+    get:
+      summary: Comprobar salud de cada proceso y conexión de base
+      operationId: get_health
+      servers:
+      - url: http://127.0.0.1:8080
+      - url: http://127.0.0.1:8101
+      - url: http://127.0.0.1:8102
+      - url: http://127.0.0.1:8103
+      - url: http://127.0.0.1:8104
+      - url: http://127.0.0.1:8105
+      - url: http://127.0.0.1:8106
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Clave interna incorrecta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Estado incompatible o sin cupos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+components:
+  securitySchemes:
+    InternalKey:
+      type: apiKey
+      in: header
+      name: X-Internal-Key
+    session:
+      type: apiKey
+      in: cookie
+      name: hotels_session
+      description: Token opaco de sesión (8 horas). Cookie `HttpOnly`, `SameSite=Strict` y `Secure` con `COOKIE_SECURE=1`.
+  schemas:
+    Error:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+      example:
+        error: Selecciona fechas AAAA-MM-DD desde hoy, con una estancia de 1 a 30 noches.
+    User:
+      type: object
+      required:
+      - id
+      - name
+      - email
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        created:
+          type: number
+          description: Fecha de alta en segundos Unix.
+        role:
+          type: string
+          enum:
+          - guest
+          - admin

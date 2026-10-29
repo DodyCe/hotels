@@ -1,0 +1,11 @@
+body { margin: 0; background: #fafbf8; font-family: Arial,sans-serif; color: #173f3b; }
+header { display: flex; align-items: center; gap: 30px; padding: 24px max(24px,calc((100% - 1400px)/2)); background: white; border-bottom: 1px solid #dde5dc; }
+header h1 { font-size: 23px; margin: 0; } header p { color: #68746f; margin-bottom: 0; } header a { color: #173f3b; } header > a:last-child { margin-left: auto; }
+.docs-brand { font-size: 32px; font-weight: bold; text-decoration: none; }
+.docs-intro { max-width: 1400px; padding: 24px; margin: auto; line-height: 1.6; }
+.docs-intro label { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-weight: bold; }
+.docs-intro select { font: inherit; padding: 10px; border: 1px solid #ced9ce; border-radius: 8px; max-width: 100%; }
+#docs-error { color: #a33d35; }
+.swagger-ui .scheme-container { background: #f0f4ed; }
+.docs-internal .auth-wrapper, .docs-internal .authorization__btn { display: none; }
+@media (max-width: 620px) { header { gap: 14px; padding: 18px; flex-wrap: wrap; } header h1 { font-size: 18px; } header p { font-size: 13px; } }

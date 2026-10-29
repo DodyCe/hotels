@@ -15,7 +15,8 @@ def target():
     db = sqlite3.connect(':memory:')
     db.row_factory = sqlite3.Row
     db.executescript('''
-        CREATE TABLE users(id TEXT PRIMARY KEY,name TEXT,email TEXT UNIQUE,salt TEXT,password_hash TEXT,created REAL);
+        CREATE TABLE users(id TEXT PRIMARY KEY,name TEXT,email TEXT UNIQUE,salt TEXT,password_hash TEXT,created REAL,role TEXT DEFAULT 'guest',active INTEGER DEFAULT 1);
+        CREATE TABLE guests(id TEXT PRIMARY KEY,user_id TEXT,name TEXT,email TEXT,phone TEXT,created REAL,active INTEGER DEFAULT 1);
         CREATE TABLE sessions(token_hash TEXT PRIMARY KEY,user_id TEXT,expires REAL);
         CREATE TABLE outbox(id TEXT PRIMARY KEY,body TEXT,attempts INTEGER,next_try REAL,delivered INTEGER);
     ''')
@@ -27,6 +28,13 @@ def user(identifier='fixture'):
 
 
 class Migration(unittest.TestCase):
+    def test_guest_retry_does_not_reactivate_archived_profile(self):
+        with closing(target()) as db:
+            source={'users':[user()], 'guests':[dict(id='g',user_id='fixture',name='Prueba',email='fixture@example.test',phone='',created=1.25,active=1)]}
+            with db:inspect_rows('auth',source,db,apply=True)
+            with db:db.execute('UPDATE guests SET active=0')
+            with db:self.assertEqual(inspect_rows('auth',source,db,apply=True)['guests']['copiados'],0)
+            self.assertEqual(db.execute('SELECT active FROM guests').fetchone()[0],0)
     def test_reservation_retry_does_not_reopen_cancelled_remote_state(self):
         source = {'reservations':[dict(id='r',user_id='u',hotel_id='h',checkin='2030-01-01',checkout='2030-01-02',guests=2,total=100,status='Pendiente',created=1.25,room_id='room',hotel_name='Hotel',room_name='Doble',inventory_synced=0)]}
         with closing(sqlite3.connect(':memory:')) as db:

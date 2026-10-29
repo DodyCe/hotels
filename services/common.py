@@ -82,6 +82,13 @@ def internal_request(base, path, body=None, cookie=''):
 def user_for(handler):
     return internal_request(AUTH, '/auth/me', cookie=handler.headers.get('Cookie', ''))['user']
 
+
+def admin_for(handler):
+    user = user_for(handler)
+    if user.get('role') != 'admin':
+        raise APIError(403, 'Se requiere una cuenta administradora.')
+    return user
+
 def session_hash(handler):
     cookie = SimpleCookie()
     try:
@@ -178,6 +185,8 @@ class Handler(BaseHTTPRequestHandler):
     do_GET = handle_request
     do_POST = handle_request
     do_DELETE = handle_request
+    do_PUT = handle_request
+    do_PATCH = handle_request
 
 def serve(handler, port):
     address = os.environ.get('SERVICE_BIND', '127.0.0.1')

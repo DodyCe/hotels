@@ -1,5 +1,6 @@
 """Punto de entrada HTTP. Sirve la web y enruta las APIs a procesos independientes."""
 import json
+import yaml
 import os
 import urllib.error
 import urllib.request
@@ -48,6 +49,21 @@ class Gateway(SimpleHTTPRequestHandler):
         if self.command != 'GET' and self.headers.get('Sec-Fetch-Site') == 'cross-site':
             return self.error_json(403, 'Solicitud externa no permitida.')
         path = urlsplit(self.path).path
+        if self.command == 'GET' and path in ('/openapi.json','/openapi-internal.json'):
+            filename = 'internal-openapi.yaml' if path == '/openapi-internal.json' else 'openapi.yaml'
+            body = json.dumps(yaml.safe_load((ROOT/'docs'/filename).read_text(encoding='utf-8')),ensure_ascii=False).encode()
+            self.send_response(200)
+            self.send_header('Content-Type','application/json; charset=utf-8')
+            self.send_header('Cache-Control','no-store')
+            self.send_header('Content-Length',str(len(body)))
+            self.end_headers(); self.wfile.write(body); return
+        if self.command == 'GET' and path == '/vendor/swagger-ui-bundle.js':
+            body = (ROOT/'web'/'vendor'/'swagger-ui-bundle.js.gz').read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type','text/javascript; charset=utf-8')
+            self.send_header('Content-Encoding','gzip')
+            self.send_header('Content-Length',str(len(body)))
+            self.end_headers(); self.wfile.write(body); return
         if path == '/health' and self.command == 'GET':
             self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers(); self.wfile.write(b'{"status":"ok","service":"gateway"}'); return
         if not path.startswith('/api/'):
@@ -57,7 +73,7 @@ class Gateway(SimpleHTTPRequestHandler):
                 return self.error_json(404, 'Archivo no encontrado.')
             return super().do_GET()
         route = self.path.removeprefix('/api')
-        if path.startswith('/api/auth/'):
+        if path.startswith('/api/auth/') or path == '/api/guests' or path.startswith('/api/guests/'):
             base = AUTH
         elif path == '/api/notifications':
             base = NOTIFICATIONS
@@ -67,13 +83,13 @@ class Gateway(SimpleHTTPRequestHandler):
             base = CATALOG
         elif path == '/api/rooms' or path.startswith('/api/rooms/'):
             base = ROOMS
-        elif path in ('/api/availability','/api/inventory'):
+        elif path in ('/api/availability','/api/inventory') or path.startswith('/api/inventory/'):
             base = AVAILABILITY
         else:
             return self.error_json(404, 'Ruta no encontrada.')
         payload = None
         headers = {'X-Internal-Key': KEY, 'X-Client-IP': self.client_address[0], 'Cookie': self.headers.get('Cookie', '')}
-        if self.command == 'POST':
+        if self.command in ('POST','PATCH','PUT'):
             if self.headers.get_content_type() != 'application/json':
                 return self.error_json(415, 'Se requiere application/json.')
             try:
@@ -103,6 +119,9 @@ class Gateway(SimpleHTTPRequestHandler):
 
     do_GET = handle_route
     do_POST = handle_route
+    do_PATCH = handle_route
+    do_PUT = handle_route
+    do_DELETE = handle_route
 
 if __name__ == '__main__':
     server = ThreadingHTTPServer((os.environ.get('GATEWAY_BIND', '127.0.0.1'), PORT), partial(Gateway, directory=str(ROOT / 'web')))

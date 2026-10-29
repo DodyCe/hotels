@@ -21,7 +21,8 @@ import postgres
 TABLES = {
     'auth': {'users': ('id', ('id', 'name', 'email', 'salt', 'password_hash', 'created')),
              'sessions': ('token_hash', ('token_hash', 'user_id', 'expires')),
-             'outbox': ('id', ('id', 'body'))},
+             'outbox': ('id', ('id', 'body')),
+             'guests': ('id', ('id','user_id','name','email','phone','created'))},
     'notifications': {'messages': ('id', ('id', 'user_id', 'recipient', 'subject', 'body', 'created'))},
     'catalog': {'hotels': ('id', ('id', 'document', 'sort_order'))},
     'rooms': {'rooms': ('id', ('id', 'hotelId', 'name', 'capacity', 'price', 'sort_order'))},
@@ -90,12 +91,13 @@ def inspect_rows(name, source, db, apply=False):
 
 
 ALLOWED_COLUMNS = {
-    'users': {'id', 'name', 'email', 'salt', 'password_hash', 'created'},
+    'users': {'id', 'name', 'email', 'salt', 'password_hash', 'created', 'role', 'active'},
+    'guests': {'id','user_id','name','email','phone','active','created'},
     'sessions': {'token_hash', 'user_id', 'expires'},
     'outbox': {'id', 'body', 'attempts', 'next_try', 'delivered'},
     'messages': {'id', 'user_id', 'recipient', 'subject', 'body', 'status', 'created', 'attempts', 'next_try'},
-    'hotels': {'id', 'document', 'sort_order'},
-    'rooms': {'id', 'hotelId', 'name', 'capacity', 'price', 'sort_order'},
+    'hotels': {'id', 'document', 'sort_order', 'active'},
+    'rooms': {'id', 'hotelId', 'name', 'capacity', 'price', 'sort_order', 'active', 'inventory_ready', 'initial_units'},
     'reservations': {'id','user_id','hotel_id','checkin','checkout','guests','total','status','created',
                      'room_id','hotel_name','room_name','inventory_synced'},
     'inventory': {'room_id','total','sort_order'},

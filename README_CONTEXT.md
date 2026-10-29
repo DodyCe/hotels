@@ -1,8 +1,22 @@
 # Hotels — contexto completo del proyecto
 
-Actualizado el **28 de octubre de 2026**. Este es el documento central de contexto, funcionamiento, herramientas, decisiones, verificación e historial de Hotels. Reúne la información antes distribuida en `HISTORIAL_PROYECTO.md`, `DECISIONES_TECNICAS.md`, `PRUEBAS.md`, `SUPABASE.md` y `FUENTES.md`.
+Actualizado el **29 de octubre de 2026**. Este es el documento central de contexto, funcionamiento, herramientas, decisiones, verificación e historial de Hotels. Reúne la información antes distribuida en `HISTORIAL_PROYECTO.md`, `DECISIONES_TECNICAS.md`, `PRUEBAS.md`, `SUPABASE.md` y `FUENTES.md`.
 
 Los resultados de ejecución que se citan conservan sus fechas. Tener código escrito, un proveedor configurado o un commit publicado no significa haber completado un despliegue público ni todos los entregables.
+
+### Desarrollo del 29 de octubre de 2026 — administración, Docker y OpenAPI
+
+El usuario pidió terminar primero los puntos funcionales: administración, ejecución con Docker y documentación interactiva de APIs; el documento de entrega se organizará después. El trabajo está en `codex/administracion-docker-openapi` para no publicar en `main` código que requiere migraciones todavía no aplicadas.
+
+Se implementaron roles `guest`/`admin`, perfiles de huéspedes, CRUD administrativo de hoteles y habitaciones, ajustes de inventario que respetan las reservas, retiros lógicos y revocación de sesiones de huéspedes desactivados. El registro público no acepta roles. `tools/set_admin.py` permite promover una cuenta existente por el canal del operador y revoca sus sesiones anteriores; aún falta que el usuario indique el correo de su cuenta administradora. No se asignó ese rol a una cuenta real automáticamente.
+
+La nueva administración está en `web/admin.html`. El alta de habitación conserva un estado pendiente si Inventario falla, se reintenta por API y no ofrece la habitación hasta confirmar sus unidades. No hay acceso directo a bases ajenas. Las tablas y permisos nuevos de Auth, Catálogo y Habitaciones están preparados en tres migraciones adicionales; se conservan las seis bases existentes.
+
+Se agregaron Swagger UI 5.34.0 y PyYAML 6.0.3. El visor `web/docs.html` sirve el contrato público y uno interno separado; el primero permite probar el Gateway usando la sesión actual y el segundo solo documenta la comunicación privada. Swagger se sirve desde los archivos oficiales locales, con licencia, versión fijada y bundle gzip; no carga una CDN ni requiere Node para ejecutar Hotels. Los secretos internos nunca aparecen en esos contratos.
+
+Verificaciones locales: 96 comprobaciones HTTP con SQLite temporal, 11 de configuración, nueve de migración, dos de OpenAPI, Ruff y ESLint aprobados. La vista de QA está aislada en `http://127.0.0.1:8081/`, con datos temporales y SMTP desactivado; no reemplaza las seis bases remotas ni la instancia normal. La nueva suite `tests/compose.py` construye y prueba siete contenedores en un proyecto aleatorio y elimina solo sus volúmenes de prueba. Docker Desktop figura registrado en Windows, pero no se encontraron sus ejecutables; se añade un trabajo Docker a GitHub Actions para verificarlo en Linux.
+
+**Pendiente de acceso:** el conector Supabase devolvió `UNAUTHORIZED` y solicita reconexión. Se pidió al usuario reconectar la cuenta de Auth/Notificaciones; Catálogo también requiere una conexión administrativa de su propia cuenta para aplicar su migración. Las conexiones de aplicación se conservan con permisos limitados y no se usan para escalar privilegios de base. No se ha aplicado ninguna de las tres migraciones nuevas ni ejecutado la prueba con seis PostgreSQL para esta etapa. El arranque normal no debe reiniciarse con el nuevo backend antes de aplicar las migraciones. Los resultados anteriores de seis PostgreSQL y 149 comprobaciones describen el hito anterior.
 
 ### Actualización del 26 de octubre de 2026 — migración de Reservas e Inventario
 

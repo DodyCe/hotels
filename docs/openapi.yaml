@@ -1,48 +1,39 @@
 openapi: 3.1.0
 info:
   title: Hotels API
-  version: 1.0.0
+  version: 1.1.0
   summary: API pública del Gateway de Hotels.
-  description: |
-    API que el navegador consume a través del Gateway (puerto 8080). El Gateway
-    quita el prefijo `/api` y reenvía cada ruta al microservicio dueño del dominio:
-
-    | Prefijo | Microservicio | Puerto interno |
-    |---|---|---|
-    | `/api/auth/*` | Autenticación | 8101 |
-    | `/api/notifications` | Notificaciones | 8102 |
-    | `/api/reservations*` | Reservas | 8103 |
-    | `/api/hotels*` | Catálogo de hoteles | 8104 |
-    | `/api/rooms*` | Habitaciones | 8105 |
-    | `/api/availability`, `/api/inventory` | Disponibilidad e inventario | 8106 |
-
-    Reglas comunes del Gateway:
-    - Solo acepta `Host` locales o el de `PUBLIC_ORIGIN`; los `POST` con otro `Origin` o
-      `Sec-Fetch-Site: cross-site` reciben 403.
-    - Los `POST` exigen `Content-Type: application/json` y un cuerpo de 1 a 16384 bytes.
-    - Si un microservicio no responde, el Gateway devuelve 503.
-    - Las rutas `/internal/*` (asignación, liberación, reconciliación, eventos y consulta
-      de usuarios) son comunicación entre servicios con `X-Internal-Key` y no están
-      expuestas por el Gateway.
-
-    Todas las respuestas son JSON y llevan `Cache-Control: no-store`. Los errores tienen
-    la forma `{"error": "mensaje"}`.
+  description: "API que el navegador consume a través del Gateway (puerto 8080). El Gateway\nquita el prefijo `/api` y reenvía\
+    \ cada ruta al microservicio dueño del dominio:\n\n| Prefijo | Microservicio | Puerto interno |\n|---|---|---|\n| `/api/auth/*`\
+    \ | Autenticación | 8101 |\n| `/api/notifications` | Notificaciones | 8102 |\n| `/api/reservations*` | Reservas | 8103\
+    \ |\n| `/api/hotels*` | Catálogo de hoteles | 8104 |\n| `/api/rooms*` | Habitaciones | 8105 |\n| `/api/availability`,\
+    \ `/api/inventory` | Disponibilidad e inventario | 8106 |\n\nReglas comunes del Gateway:\n- Solo acepta `Host` locales\
+    \ o el de `PUBLIC_ORIGIN`; los `POST` con otro `Origin` o\n  `Sec-Fetch-Site: cross-site` reciben 403.\n- Los `POST` exigen\
+    \ `Content-Type: application/json` y un cuerpo de 1 a 16384 bytes.\n- Si un microservicio no responde, el Gateway devuelve\
+    \ 503.\n- Las rutas `/internal/*` (asignación, liberación, reconciliación, eventos y consulta\n  de usuarios) son comunicación\
+    \ entre servicios con `X-Internal-Key` y no están\n  expuestas por el Gateway.\n\nTodas las respuestas son JSON y llevan\
+    \ `Cache-Control: no-store`. Los errores tienen\nla forma `{\"error\": \"mensaje\"}`.\n\nAdministración: requiere role=admin;\
+    \ las cuentas públicas se registran como guest. DELETE desactiva registros y conserva el historial. PATCH/PUT requieren\
+    \ JSON. Las rutas internas se documentan en un contrato separado y no se publican por el Gateway.\n"
 servers:
-  - url: http://127.0.0.1:8080/api
-    description: Gateway local (INICIAR.cmd o docker compose)
+- url: http://127.0.0.1:8080/api
+  description: Gateway local (INICIAR.cmd o docker compose)
 tags:
-  - name: Autenticación
-  - name: Catálogo
-  - name: Habitaciones
-  - name: Disponibilidad
-  - name: Reservas
-  - name: Notificaciones
+- name: Autenticación
+- name: Catálogo
+- name: Habitaciones
+- name: Disponibilidad
+- name: Reservas
+- name: Notificaciones
+- name: Huéspedes
 paths:
   /auth/register:
     post:
-      tags: [Autenticación]
+      tags:
+      - Autenticación
       summary: Crear cuenta e iniciar sesión
-      description: Crea la cuenta, abre una sesión de 8 horas y encola el correo de bienvenida. Comparte con el inicio de sesión el límite de 12 intentos por minuto por IP.
+      description: Crea la cuenta, abre una sesión de 8 horas y encola el correo de bienvenida. Comparte con el inicio de
+        sesión el límite de 12 intentos por minuto por IP.
       operationId: register
       requestBody:
         required: true
@@ -72,7 +63,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
   /auth/login:
     post:
-      tags: [Autenticación]
+      tags:
+      - Autenticación
       summary: Iniciar sesión
       description: Valida la contraseña (scrypt) y rota la sesión presentada.
       operationId: login
@@ -104,11 +96,12 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
   /auth/me:
     get:
-      tags: [Autenticación]
+      tags:
+      - Autenticación
       summary: Usuario de la sesión actual
       operationId: currentUser
       security:
-        - session: []
+      - session: []
       responses:
         '200':
           description: Perfil de la cuenta.
@@ -120,7 +113,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
   /auth/logout:
     post:
-      tags: [Autenticación]
+      tags:
+      - Autenticación
       summary: Cerrar sesión
       description: Revoca la sesión en el servidor y borra la cookie. El cuerpo puede ser `{}`.
       operationId: logout
@@ -137,9 +131,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Ok'
+      security:
+      - session: []
   /hotels:
     get:
-      tags: [Catálogo]
+      tags:
+      - Catálogo
       summary: Listar hoteles
       operationId: listHotels
       responses:
@@ -149,24 +146,95 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [hotels]
+                required:
+                - hotels
                 properties:
                   hotels:
                     type: array
                     items:
                       $ref: '#/components/schemas/Hotel'
+      parameters:
+      - name: includeInactive
+        in: query
+        description: Incluye inactivos y altas pendientes. Solo administradores.
+        schema:
+          type: boolean
+          default: false
+    post:
+      tags:
+      - Catálogo
+      summary: Crear hotel
+      operationId: createHotel
+      security:
+      - session: []
+      responses:
+        '201':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HotelResponse'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Sesión requerida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Se requiere el rol admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicto de correo, estado o inventario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HotelCreate'
   /hotels/{hotelId}:
     get:
-      tags: [Catálogo]
+      tags:
+      - Catálogo
       summary: Consultar un hotel
       operationId: getHotel
       parameters:
-        - name: hotelId
-          in: path
-          required: true
-          schema:
-            type: string
-          example: ghl-monteria
+      - name: hotelId
+        in: path
+        required: true
+        schema:
+          type: string
+        example: ghl-monteria
+      - name: includeInactive
+        in: query
+        description: Incluye inactivos y altas pendientes. Solo administradores.
+        schema:
+          type: boolean
+          default: false
       responses:
         '200':
           description: Hotel encontrado.
@@ -174,33 +242,161 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [hotel]
+                required:
+                - hotel
                 properties:
                   hotel:
                     $ref: '#/components/schemas/Hotel'
         '404':
           $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - Catálogo
+      summary: Editar hotel
+      operationId: patchHotel
+      security:
+      - session: []
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HotelResponse'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Sesión requerida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Se requiere el rol admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicto de correo, estado o inventario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HotelPatch'
+      parameters:
+      - name: hotelId
+        in: path
+        required: true
+        schema:
+          type: string
+        example: ghl-monteria
+    delete:
+      tags:
+      - Catálogo
+      summary: Desactivar hotel y conservar su historial
+      operationId: deleteHotel
+      security:
+      - session: []
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HotelResponse'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Sesión requerida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Se requiere el rol admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicto de correo, estado o inventario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: hotelId
+        in: path
+        required: true
+        schema:
+          type: string
+        example: ghl-monteria
   /rooms:
     get:
-      tags: [Habitaciones]
+      tags:
+      - Habitaciones
       summary: Listar tipos de habitación
       operationId: listRooms
       parameters:
-        - name: hotelId
-          in: query
-          required: false
-          description: Solo los tipos de este hotel.
-          schema:
-            type: string
-        - name: guests
-          in: query
-          required: false
-          description: Solo los tipos con capacidad para este número de huéspedes.
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 20
-            default: 1
+      - name: hotelId
+        in: query
+        required: false
+        description: Solo los tipos de este hotel.
+        schema:
+          type: string
+      - name: guests
+        in: query
+        required: false
+        description: Solo los tipos con capacidad para este número de huéspedes.
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 1
+      - name: includeInactive
+        in: query
+        description: Incluye inactivos y altas pendientes. Solo administradores.
+        schema:
+          type: boolean
+          default: false
       responses:
         '200':
           description: Tipos de habitación que cumplen los filtros.
@@ -208,7 +404,8 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [rooms]
+                required:
+                - rooms
                 properties:
                   rooms:
                     type: array
@@ -216,18 +413,87 @@ paths:
                       $ref: '#/components/schemas/Room'
         '400':
           $ref: '#/components/responses/BadRequest'
+    post:
+      tags:
+      - Habitaciones
+      summary: Crear habitación y su inventario
+      operationId: createRoom
+      security:
+      - session: []
+      responses:
+        '201':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Sesión requerida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Se requiere el rol admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicto de correo, estado o inventario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '202':
+          description: Habitación guardada; Inventario está pendiente y se reintentará automáticamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomCreate'
   /rooms/{roomId}:
     get:
-      tags: [Habitaciones]
+      tags:
+      - Habitaciones
       summary: Consultar un tipo de habitación
       operationId: getRoom
       parameters:
-        - name: roomId
-          in: path
-          required: true
-          schema:
-            type: string
-          example: ghl-monteria-principal
+      - name: roomId
+        in: path
+        required: true
+        schema:
+          type: string
+        example: ghl-monteria-principal
+      - name: includeInactive
+        in: query
+        description: Incluye inactivos y altas pendientes. Solo administradores.
+        schema:
+          type: boolean
+          default: false
       responses:
         '200':
           description: Tipo de habitación encontrado.
@@ -235,15 +501,137 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [room]
+                required:
+                - room
                 properties:
                   room:
                     $ref: '#/components/schemas/Room'
         '404':
           $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - Habitaciones
+      summary: Editar habitación
+      operationId: patchRoom
+      security:
+      - session: []
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Sesión requerida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Se requiere el rol admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicto de correo, estado o inventario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomPatch'
+      parameters:
+      - name: roomId
+        in: path
+        required: true
+        schema:
+          type: string
+        example: ghl-monteria-principal
+    delete:
+      tags:
+      - Habitaciones
+      summary: Desactivar habitación y conservar su historial
+      operationId: deleteRoom
+      security:
+      - session: []
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Sesión requerida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Se requiere el rol admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicto de correo, estado o inventario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: roomId
+        in: path
+        required: true
+        schema:
+          type: string
+        example: ghl-monteria-principal
   /inventory:
     get:
-      tags: [Disponibilidad]
+      tags:
+      - Disponibilidad
       summary: Unidades por tipo de habitación
       operationId: listInventory
       responses:
@@ -253,7 +641,8 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [inventory]
+                required:
+                - inventory
                 properties:
                   inventory:
                     type: array
@@ -261,16 +650,20 @@ paths:
                       $ref: '#/components/schemas/InventoryItem'
   /availability:
     get:
-      tags: [Disponibilidad]
+      tags:
+      - Disponibilidad
       summary: Disponibilidad por rango de fechas
-      description: |
-        Unidades libres de cada tipo en todas las noches del rango. La fecha de salida no
+      description: 'Unidades libres de cada tipo en todas las noches del rango. La fecha de salida no
+
         ocupa noche. Las fechas se validan con el calendario de Montería (UTC-5): llegada
+
         desde hoy y estancia de 1 a 30 noches.
+
+        '
       operationId: getAvailability
       parameters:
-        - $ref: '#/components/parameters/Checkin'
-        - $ref: '#/components/parameters/Checkout'
+      - $ref: '#/components/parameters/Checkin'
+      - $ref: '#/components/parameters/Checkout'
       responses:
         '200':
           description: Disponibilidad por tipo de habitación.
@@ -278,7 +671,8 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [availability]
+                required:
+                - availability
                 properties:
                   availability:
                     type: array
@@ -288,11 +682,12 @@ paths:
           $ref: '#/components/responses/BadRequest'
   /reservations:
     get:
-      tags: [Reservas]
+      tags:
+      - Reservas
       summary: Reservas de la cuenta
       operationId: listReservations
       security:
-        - session: []
+      - session: []
       responses:
         '200':
           description: Reservas propias, de la más reciente a la más antigua.
@@ -300,7 +695,8 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [reservations]
+                required:
+                - reservations
                 properties:
                   reservations:
                     type: array
@@ -309,15 +705,19 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
     post:
-      tags: [Reservas]
+      tags:
+      - Reservas
       summary: Crear una reserva
-      description: |
-        El precio y el propietario los decide el servidor. Reservas consulta la habitación
+      description: 'El precio y el propietario los decide el servidor. Reservas consulta la habitación
+
         y el hotel por API y pide la asignación a Inventario. Si Inventario no responde, la
+
         reserva queda `Pendiente` (202) y un trabajador la confirma o rechaza después.
+
+        '
       operationId: createReservation
       security:
-        - session: []
+      - session: []
       requestBody:
         required: true
         content:
@@ -353,19 +753,21 @@ paths:
           $ref: '#/components/responses/Unavailable'
   /reservations/{reservationId}/cancel:
     post:
-      tags: [Reservas]
+      tags:
+      - Reservas
       summary: Cancelar una reserva propia
-      description: Idempotente. Si Inventario no responde, queda `Cancelando` (202) y se completa al recuperarlo. El cuerpo puede ser `{}`.
+      description: Idempotente. Si Inventario no responde, queda `Cancelando` (202) y se completa al recuperarlo. El cuerpo
+        puede ser `{}`.
       operationId: cancelReservation
       security:
-        - session: []
+      - session: []
       parameters:
-        - name: reservationId
-          in: path
-          required: true
-          schema:
-            type: string
-          example: HT-3F9A1C2B7D
+      - name: reservationId
+        in: path
+        required: true
+        schema:
+          type: string
+        example: HT-3F9A1C2B7D
       requestBody:
         required: true
         content:
@@ -395,12 +797,14 @@ paths:
                 $ref: '#/components/schemas/Error'
   /notifications:
     get:
-      tags: [Notificaciones]
+      tags:
+      - Notificaciones
       summary: Avisos de la cuenta
-      description: Hasta 100 mensajes, del más reciente al más antiguo. El destinatario siempre es el correo de la cuenta en Auth.
+      description: Hasta 100 mensajes, del más reciente al más antiguo. El destinatario siempre es el correo de la cuenta
+        en Auth.
       operationId: listNotifications
       security:
-        - session: []
+      - session: []
       responses:
         '200':
           description: Mensajes y estado del envío por SMTP.
@@ -408,7 +812,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [notifications, smtpConfigured]
+                required:
+                - notifications
+                - smtpConfigured
                 properties:
                   notifications:
                     type: array
@@ -419,6 +825,297 @@ paths:
                     description: Si es falso, los mensajes quedan solo como vista previa en la web.
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /guests:
+    get:
+      tags:
+      - Huéspedes
+      summary: Listar huéspedes activos e inactivos
+      operationId: listGuests
+      security:
+      - session: []
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestsResponse'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Sesión requerida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Se requiere el rol admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicto de correo, estado o inventario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Huéspedes
+      summary: Registrar un huésped sin crear una contraseña ni enviar correo
+      operationId: createGuest
+      security:
+      - session: []
+      responses:
+        '201':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestResponse'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Sesión requerida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Se requiere el rol admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicto de correo, estado o inventario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestCreate'
+  /guests/{guestId}:
+    patch:
+      tags:
+      - Huéspedes
+      summary: Editar huésped o reactivarlo
+      operationId: patchGuest
+      security:
+      - session: []
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestResponse'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Sesión requerida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Se requiere el rol admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicto de correo, estado o inventario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestPatch'
+      parameters:
+      - name: guestId
+        in: path
+        required: true
+        schema:
+          type: string
+      description: El correo de una cuenta vinculada no se cambia aquí. No se pueden modificar roles ni cuentas administradoras.
+    delete:
+      tags:
+      - Huéspedes
+      summary: Desactivar huésped y revocar sus sesiones vinculadas
+      operationId: deleteGuest
+      security:
+      - session: []
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestResponse'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Sesión requerida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Se requiere el rol admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicto de correo, estado o inventario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: guestId
+        in: path
+        required: true
+        schema:
+          type: string
+      description: El correo de una cuenta vinculada no se cambia aquí. No se pueden modificar roles ni cuentas administradoras.
+  /inventory/{roomId}:
+    put:
+      tags:
+      - Disponibilidad
+      summary: Modificar unidades sin reducirlas por debajo de las reservas vigentes
+      operationId: updateInventory
+      security:
+      - session: []
+      responses:
+        '200':
+          description: Operación completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryResponse'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Sesión requerida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Se requiere el rol admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Recurso inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicto de correo, estado o inventario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Servicio no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryUpdate'
+      parameters:
+      - name: roomId
+        in: path
+        required: true
+        schema:
+          type: string
 components:
   securitySchemes:
     session:
@@ -486,7 +1183,8 @@ components:
   schemas:
     Error:
       type: object
-      required: [error]
+      required:
+      - error
       properties:
         error:
           type: string
@@ -494,7 +1192,8 @@ components:
         error: Selecciona fechas AAAA-MM-DD desde hoy, con una estancia de 1 a 30 noches.
     Ok:
       type: object
-      required: [ok]
+      required:
+      - ok
       properties:
         ok:
           type: boolean
@@ -504,7 +1203,10 @@ components:
       example: {}
     RegisterRequest:
       type: object
-      required: [name, email, password]
+      required:
+      - name
+      - email
+      - password
       properties:
         name:
           type: string
@@ -518,9 +1220,12 @@ components:
           type: string
           minLength: 10
           maxLength: 128
+      additionalProperties: false
     LoginRequest:
       type: object
-      required: [email, password]
+      required:
+      - email
+      - password
       properties:
         email:
           type: string
@@ -530,9 +1235,13 @@ components:
           type: string
           minLength: 10
           maxLength: 128
+      additionalProperties: false
     User:
       type: object
-      required: [id, name, email]
+      required:
+      - id
+      - name
+      - email
       properties:
         id:
           type: string
@@ -545,15 +1254,34 @@ components:
         created:
           type: number
           description: Fecha de alta en segundos Unix.
+        role:
+          type: string
+          enum:
+          - guest
+          - admin
     UserResponse:
       type: object
-      required: [user]
+      required:
+      - user
       properties:
         user:
           $ref: '#/components/schemas/User'
     Hotel:
       type: object
-      required: [id, name, city, area, address, description, tags, amenities, image, photographer, photoPage, source, badge]
+      required:
+      - id
+      - name
+      - city
+      - area
+      - address
+      - description
+      - tags
+      - amenities
+      - image
+      - photographer
+      - photoPage
+      - source
+      - badge
       properties:
         id:
           type: string
@@ -574,7 +1302,10 @@ components:
           description: Claves de los filtros de la web.
           items:
             type: string
-            enum: [wifi, restaurant, work]
+            enum:
+            - wifi
+            - restaurant
+            - work
         amenities:
           type: array
           items:
@@ -594,9 +1325,16 @@ components:
           description: Sitio oficial del hotel de referencia.
         badge:
           type: string
+        active:
+          type: boolean
     Room:
       type: object
-      required: [id, hotelId, name, capacity, price]
+      required:
+      - id
+      - hotelId
+      - name
+      - capacity
+      - price
       properties:
         id:
           type: string
@@ -614,9 +1352,16 @@ components:
           type: integer
           description: Tarifa de ejemplo por noche, en pesos colombianos.
           example: 350000
+        active:
+          type: boolean
+        inventory_ready:
+          type: boolean
+          description: Solo las habitaciones con inventario confirmado se ofrecen al público.
     InventoryItem:
       type: object
-      required: [roomId, total]
+      required:
+      - roomId
+      - total
       properties:
         roomId:
           type: string
@@ -625,7 +1370,10 @@ components:
           minimum: 1
     AvailabilityItem:
       type: object
-      required: [roomId, total, available]
+      required:
+      - roomId
+      - total
+      - available
       properties:
         roomId:
           type: string
@@ -636,7 +1384,11 @@ components:
           minimum: 0
     ReservationRequest:
       type: object
-      required: [roomId, checkin, checkout, guests]
+      required:
+      - roomId
+      - checkin
+      - checkout
+      - guests
       properties:
         roomId:
           type: string
@@ -657,10 +1409,27 @@ components:
           description: No puede superar la capacidad de la habitación.
     ReservationStatus:
       type: string
-      enum: [Pendiente, Confirmada, Rechazada, Cancelando, Cancelada]
+      enum:
+      - Pendiente
+      - Confirmada
+      - Rechazada
+      - Cancelando
+      - Cancelada
     Reservation:
       type: object
-      required: [id, user_id, hotel_id, room_id, hotel, room, checkin, checkout, guests, total, status, created]
+      required:
+      - id
+      - user_id
+      - hotel_id
+      - room_id
+      - hotel
+      - room
+      - checkin
+      - checkout
+      - guests
+      - total
+      - status
+      - created
       properties:
         id:
           type: string
@@ -699,13 +1468,16 @@ components:
           description: Segundos Unix.
     ReservationResponse:
       type: object
-      required: [reservation]
+      required:
+      - reservation
       properties:
         reservation:
           $ref: '#/components/schemas/Reservation'
     CancelResponse:
       type: object
-      required: [ok, status]
+      required:
+      - ok
+      - status
       properties:
         ok:
           type: boolean
@@ -714,7 +1486,13 @@ components:
           $ref: '#/components/schemas/ReservationStatus'
     Notification:
       type: object
-      required: [id, recipient, subject, body, status, created]
+      required:
+      - id
+      - recipient
+      - subject
+      - body
+      - status
+      - created
       properties:
         id:
           type: string
@@ -729,7 +1507,205 @@ components:
           description: Texto plano del correo.
         status:
           type: string
-          enum: [vista_previa, pendiente, reintentando, aceptado_smtp, error]
+          enum:
+          - vista_previa
+          - pendiente
+          - reintentando
+          - aceptado_smtp
+          - error
         created:
           type: number
           description: Segundos Unix.
+    HotelCreate:
+      type: object
+      additionalProperties: false
+      properties: &id001
+        name:
+          type: string
+          example: GHL Hotel Montería
+        area:
+          type: string
+        address:
+          type: string
+        description:
+          type: string
+        tags:
+          type: array
+          description: Claves de los filtros de la web.
+          items:
+            type: string
+            enum:
+            - wifi
+            - restaurant
+            - work
+        amenities:
+          type: array
+          items:
+            type: string
+        image:
+          type: string
+          format: uri
+          description: Foto ilustrativa de Unsplash; no corresponde al hotel.
+        photographer:
+          type: string
+        photoPage:
+          type: string
+          format: uri
+        source:
+          type: string
+          format: uri
+          description: Sitio oficial del hotel de referencia.
+        badge:
+          type: string
+        active:
+          type: boolean
+      required:
+      - name
+      - area
+      - address
+      - description
+      - source
+    HotelPatch:
+      type: object
+      additionalProperties: false
+      properties: *id001
+    HotelResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        hotel:
+          $ref: '#/components/schemas/Hotel'
+      required:
+      - hotel
+    RoomCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        hotelId:
+          type: string
+          maxLength: 120
+        name: &id002
+          type: string
+          maxLength: 120
+        capacity: &id003
+          type: integer
+          minimum: 1
+          maximum: 20
+        price: &id004
+          type: integer
+          minimum: 1
+          maximum: 100000000
+        total:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      required:
+      - hotelId
+      - name
+      - capacity
+      - price
+      - total
+    RoomPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: *id002
+        capacity: *id003
+        price: *id004
+        active:
+          type: boolean
+    RoomResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        room:
+          $ref: '#/components/schemas/Room'
+      required:
+      - room
+    InventoryUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        total:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      required:
+      - total
+    InventoryResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        inventory:
+          $ref: '#/components/schemas/InventoryItem'
+      required:
+      - inventory
+    Guest:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          maxLength: 120
+        user_id:
+          type:
+          - string
+          - 'null'
+        name: &id005
+          type: string
+          maxLength: 80
+        email: &id006
+          type: string
+          format: email
+          maxLength: 254
+        phone: &id007
+          type: string
+          maxLength: 30
+        active: &id008
+          type: boolean
+        created:
+          type: number
+      required:
+      - id
+      - user_id
+      - name
+      - email
+      - phone
+      - active
+      - created
+    GuestCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        name: *id005
+        email: *id006
+        phone: *id007
+      required:
+      - name
+      - email
+    GuestPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: *id005
+        email: *id006
+        phone: *id007
+        active: *id008
+    GuestResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        guest:
+          $ref: '#/components/schemas/Guest'
+      required:
+      - guest
+    GuestsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        guests:
+          type: array
+          items:
+            $ref: '#/components/schemas/Guest'
+      required:
+      - guests

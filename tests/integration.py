@@ -25,9 +25,9 @@ FIXTURE_ALLOCATION_IDS = set(LEGACY_IDS)
 TEST_DATE_BASE = dt.date(2100,1,1)+dt.timedelta(days=int(RUN_TAG[:6],16)%6000)
 def client():
     return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-def request(opener, path, data=None, headers=None):
+def request(opener, path, data=None, headers=None, method=None):
     body = json.dumps(data).encode() if data is not None else None
-    req = urllib.request.Request(BASE+path, data=body, headers={'Content-Type':'application/json', **(headers or {})})
+    req = urllib.request.Request(BASE+path, data=body, headers={'Content-Type':'application/json', **(headers or {})},method=method)
     try: response = opener.open(req, timeout=15)
     except urllib.error.HTTPError as error: response = error
     with response:
@@ -103,7 +103,81 @@ def run_checks(data_dir):
     check(request(a,'/api/auth/logout',{})[0] == 200 and request(a,'/api/reservations')[0] == 401,'Cierre de sesión revoca acceso')
     advanced_checks(a,b,data_dir,password,email_a)
     inventory_concurrency_checks(a,password,email_a)
+    admin_checks(a,data_dir,password,email_a)
     print(json.dumps({'passed':len(checks),'checks':checks},ensure_ascii=False,indent=2))
+
+
+def admin_checks(customer,data_dir,password,email):
+    request(customer,'/api/auth/login',{'email':email,'password':password})
+    check(request(customer,'/api/guests')[0]==403,'Una cuenta normal no puede consultar huéspedes')
+    check(request(customer,'/api/hotels?includeInactive=true')[0]==403,'Los registros inactivos requieren administración')
+    check(request(customer,'/api/hotels',{})[0]==403,'Una cuenta normal no puede crear hoteles')
+    check(request(client(),'/api/auth/register',{'name':'Escalada','email':'escalada-'+RUN_TAG+'@example.test','password':password,'role':'admin'})[0]==400,'El registro público no acepta roles de administrador')
+    admin=client()
+    admin_email='admin-'+RUN_TAG+'@example.test'
+    code,result,_=request(admin,'/api/auth/register',{'name':'Administrador de prueba','email':admin_email,'password':password})
+    assert code==201
+    uid=result['user']['id']
+    if USE_POSTGRES:
+        import postgres
+        with postgres.connect('auth') as db:
+            db.execute("UPDATE users SET role='admin' WHERE id=?",(uid,))
+    else:
+        with closing(sqlite3.connect(Path(data_dir)/'auth.sqlite3')) as db:
+            db.execute("UPDATE users SET role='admin' WHERE id=?",(uid,));db.commit()
+    check(request(admin,'/api/auth/me')[1]['user']['role']=='admin','Auth resuelve el rol actual en el servidor')
+    check(request(admin,'/api/guests')[0]==200,'El administrador puede consultar los perfiles de huéspedes')
+    if USE_POSTGRES:
+        # CRUD completo se ejecuta en SQLite aislado y Docker; no deja hoteles de prueba en las bases compartidas.
+        return
+    hotel={'name':'Hotel de validación','area':'Centro','address':'Calle de validación 1','description':'Hotel temporal de las pruebas de administración.','source':'https://example.test','tags':['wifi'],'amenities':['Wi-Fi']}
+    code,result,_=request(admin,'/api/hotels',hotel)
+    check(code==201,'Administración crea un hotel por el Gateway')
+    hid=result['hotel']['id']
+    check(request(admin,'/api/hotels/'+hid,{'name':'Hotel actualizado'},method='PATCH')[1]['hotel']['name']=='Hotel actualizado','Administración edita hoteles con PATCH')
+    check(request(admin,'/api/hotels/'+hid,{'name':'<script>alert(1)</script>'},method='PATCH')[0]==400,'Se rechaza HTML en los campos administrativos')
+    code,result,_=request(admin,'/api/rooms',{'hotelId':hid,'name':'Doble de prueba','capacity':2,'price':111000,'total':2})
+    check(code==201 and result['room']['inventory_ready'],'El alta de habitación crea su inventario mediante API')
+    room=result['room']['id']
+    check(request(customer,'/api/rooms/'+room,{'price':1},method='PATCH')[0]==403,'Una cuenta normal no puede cambiar tarifas')
+    check(request(admin,'/api/rooms/'+room,{'name':'Doble actualizada','price':120000},method='PATCH')[1]['room']['price']==120000,'Administración edita características y tarifa')
+    start=TEST_DATE_BASE+dt.timedelta(days=280)
+    booking={'roomId':room,'checkin':str(start),'checkout':str(start+dt.timedelta(days=2)),'guests':2}
+    first=request(customer,'/api/reservations',booking)
+    second=request(customer,'/api/reservations',booking)
+    check(first[0]==second[0]==201 and first[1]['reservation']['total']==240000,'Las habitaciones administradas se reservan y usan la tarifa del servidor')
+    check(request(admin,'/api/inventory/'+room,{'total':1},method='PUT')[0]==409,'Inventario rechaza reducciones que causarían sobreventa')
+    check(request(customer,'/api/inventory/'+room,{'total':3},method='PUT')[0]==403,'Solo administración puede ajustar unidades')
+    check(request(admin,'/api/inventory/'+room,{'total':3},method='PUT')[1]['inventory']['total']==3,'Administración ajusta unidades en el servicio de Inventario')
+    check(request(admin,'/api/rooms/'+room,method='DELETE')[1]['room']['active'] is False,'Retirar una habitación conserva el registro histórico')
+    check(request(customer,'/api/rooms/'+room)[0]==404,'Las habitaciones inactivas no se ofrecen al público')
+    check(request(admin,'/api/rooms/'+room,{'active':True},method='PATCH')[1]['room']['active'],'Una habitación se puede reactivar')
+    check(request(admin,'/api/hotels/'+hid,method='DELETE')[1]['hotel']['active'] is False,'Administración retira hoteles sin borrar reservas')
+    check(request(customer,'/api/reservations',booking)[0]==404,'No se admiten reservas nuevas en hoteles retirados')
+    check(request(admin,'/api/hotels/'+hid,{'active':True},method='PATCH')[1]['hotel']['active'],'Un hotel se puede reactivar')
+    for created in (first,second):request(customer,'/api/reservations/'+created[1]['reservation']['id']+'/cancel',{})
+    code,result,_=request(admin,'/api/guests',{'name':'Huésped sin cuenta','email':'invitado-'+RUN_TAG+'@example.test','phone':'3001234567'})
+    check(code==201 and result['guest']['user_id'] is None,'Se registra un huésped sin crear credenciales ni sesión')
+    gid=result['guest']['id']
+    check(request(admin,'/api/guests/'+gid,{'name':'Huésped actualizado'},method='PATCH')[1]['guest']['name']=='Huésped actualizado','Se editan los datos de un huésped')
+    check(request(admin,'/api/guests/'+gid,method='DELETE')[1]['guest']['active'] is False,'Retirar un huésped conserva sus datos históricos')
+    check(request(admin,'/api/guests/'+gid,{'active':True},method='PATCH')[1]['guest']['active'],'Un huésped se puede reactivar')
+    check(request(admin,'/api/guests/'+uid,method='DELETE')[0]==409,'No se puede desactivar una cuenta administradora como huésped')
+    account=client();account_email='guest-'+RUN_TAG+'@example.test'
+    uid=request(account,'/api/auth/register',{'name':'Cuenta desactivable','email':account_email,'password':password})[1]['user']['id']
+    request(admin,'/api/guests/'+uid,method='DELETE')
+    check(request(account,'/api/auth/me')[0]==401,'Desactivar un huésped vinculado revoca sus sesiones')
+    check(request(client(),'/api/auth/login',{'email':account_email,'password':password})[0]==403,'Una cuenta inactiva no puede iniciar sesión')
+    CONTROLLER('stop',18106)
+    code,result,_=request(admin,'/api/rooms',{'hotelId':hid,'name':'Alta recuperable','capacity':2,'price':100000,'total':1})
+    check(code==202 and not result['room']['inventory_ready'],'La caída de Inventario conserva un alta pendiente, sin ofrecer cupos ficticios')
+    pending=result['room']['id']
+    CONTROLLER('start',18106)
+    check(poll(lambda:request(customer,'/api/rooms/'+pending)[0]==200,timeout=15),'El alta pendiente se recupera al volver Inventario')
+    with urllib.request.urlopen(BASE+'/openapi.json') as response:spec=json.load(response)
+    check('/guests' in spec['paths'] and 'patch' in spec['paths']['/hotels/{hotelId}'],'OpenAPI publica los contratos administrativos')
+    with urllib.request.urlopen(BASE+'/openapi-internal.json') as response:spec=json.load(response)
+    check('/internal/inventory' in spec['paths'] and '/internal/allocate' in spec['paths'],'OpenAPI documenta la comunicación interna sin exponerla en el Gateway')
 
 
 
