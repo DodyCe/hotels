@@ -486,6 +486,26 @@ dialog {
   color: var(--ink);
 }
 
+.danger {
+  background: #a9422e;
+  color: #fff;
+}
+
+.danger:hover {
+  background: #8c3524;
+}
+
+.modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.modal-actions .button {
+  margin-top: 0;
+}
+
 .empty {
   grid-column: 1/-1;
 }
