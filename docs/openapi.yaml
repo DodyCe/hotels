@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Hotels API
-  version: 1.1.0
+  version: 1.2.0
   summary: API pública del Gateway de Hotels.
   description: "API que el navegador consume a través del Gateway (puerto 8080). El Gateway\nquita el prefijo `/api` y reenvía\
     \ cada ruta al microservicio dueño del dominio:\n\n| Prefijo | Microservicio | Puerto interno |\n|---|---|---|\n| `/api/auth/*`\
@@ -16,8 +16,8 @@ info:
     \ las cuentas públicas se registran como guest. DELETE desactiva registros y conserva el historial. PATCH/PUT requieren\
     \ JSON. Las rutas internas se documentan en un contrato separado y no se publican por el Gateway.\n"
 servers:
-- url: http://127.0.0.1:8080/api
-  description: Gateway local (INICIAR.cmd o docker compose)
+- url: /api
+  description: Gateway del mismo dominio, en local o Vercel.
 tags:
 - name: Autenticación
 - name: Catálogo
@@ -27,6 +27,26 @@ tags:
 - name: Notificaciones
 - name: Huéspedes
 paths:
+  /readiness:
+    get:
+      summary: Consultar disponibilidad de los seis microservicios
+      description: Comprobación paralela del Gateway. No devuelve URLs ni credenciales y no modifica reservas. Puede despertar servicios suspendidos por el alojamiento.
+      operationId: serviceReadiness
+      responses:
+        '200':
+          description: Estado de las dependencias; ready solo es verdadero si las seis responden.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ready, services]
+                properties:
+                  ready:
+                    type: boolean
+                  services:
+                    type: object
+                    additionalProperties:
+                      type: boolean
   /auth/register:
     post:
       tags:
@@ -861,7 +881,7 @@ paths:
       - session: []
       responses:
         '200':
-          description: Mensajes y estado del envío por SMTP.
+          description: Mensajes y estado del proveedor de correo configurado.
           content:
             application/json:
               schema:
@@ -876,7 +896,7 @@ paths:
                       $ref: '#/components/schemas/Notification'
                   smtpConfigured:
                     type: boolean
-                    description: Si es falso, los mensajes quedan solo como vista previa en la web.
+                    description: Campo de compatibilidad que indica configuración SMTP o Gmail API. Si es falso, los mensajes quedan solo como vista previa en la web. No confirma entrega a la bandeja.
         '401':
           $ref: '#/components/responses/Unauthorized'
   /guests:
@@ -1581,6 +1601,7 @@ components:
           - pendiente
           - reintentando
           - aceptado_smtp
+          - aceptado_api
           - error
         created:
           type: number

@@ -4,6 +4,8 @@ Actualizado el **29 de octubre de 2026**. Este es el documento central de contex
 
 Los resultados de ejecución que se citan conservan sus fechas. Tener código escrito, un proveedor configurado o un commit publicado no significa haber completado un despliegue público ni todos los entregables.
 
+**Estado más reciente:** se autorizó y preparó la publicación en Vercel y Render; todavía faltan la conexión de esas cuentas, la autorización Gmail API y la creación/verificación de los recursos públicos. Véase la sección 19. Las notas anteriores de despliegue diferido reflejan las decisiones vigentes en sus respectivas etapas.
+
 ### Recuperación de contraseña y bloqueo por correo — 29 de octubre de 2026
 
 El usuario pidió añadir recuperación y bloquear el acceso después de seis contraseñas incorrectas, mostrando los intentos restantes. Se mantienen seis microservicios: Autenticación es responsable del estado de seguridad y Notificaciones entrega los correos por SMTP. La prioridad acordada es terminar esta funcionalidad antes de discutir el despliegue y organizar la entrega formal.

@@ -4,6 +4,8 @@ async function loadDocumentation() {
   document.querySelector('#docs-error').textContent = '';
   document.querySelector('#docs-note').textContent = internal ? 'Estas rutas solo se usan entre microservicios con una clave privada. La consola interna es de solo lectura; no solicita ni expone la clave.' : 'Para probar reservas y administración, inicia sesión en Hotels en otra pestaña. Las operaciones utilizan tu sesión actual y pueden modificar datos.';
   try {
+    if (!await window.waitForHotelsServices(message => { document.querySelector('#docs-error').textContent = message; })) return;
+    document.querySelector('#docs-error').textContent = '';
     const response = await fetch(internal?'/openapi-internal.json':'/openapi.json');
     if(!response.ok)throw new Error('No se pudo cargar el contrato.');
     const spec = await response.json();

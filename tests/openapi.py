@@ -7,6 +7,12 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 class OpenAPI(unittest.TestCase):
+    def test_public_contract_uses_current_origin_and_https_email_status(self):
+        spec=yaml.safe_load((ROOT/'docs/openapi.yaml').read_text(encoding='utf-8'))
+        self.assertEqual(spec['servers'][0]['url'],'/api')
+        self.assertIn('200',spec['paths']['/readiness']['get']['responses'])
+        self.assertIn('aceptado_api',spec['components']['schemas']['Notification']['properties']['status']['enum'])
+
     def test_recovery_contract_does_not_return_secrets(self):
         spec=yaml.safe_load((ROOT/'docs/openapi.yaml').read_text(encoding='utf-8'))
         forgot=spec['paths']['/auth/forgot-password']['post']
