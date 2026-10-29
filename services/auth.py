@@ -8,17 +8,31 @@ import threading
 import time
 import uuid
 import postgres
+from urllib.parse import urlsplit
+import validation
 from common import APIError, Handler, INTEGRITY_ERRORS, SESSION_SECONDS, connect, enqueue, init_outbox, serve, session_hash, start_outbox
 
 with connect('auth') as db:
     if postgres.database_url('auth'):
         postgres.initialize('auth', db)
+        db.execute('SELECT role,active FROM users LIMIT 1')
+        db.execute('SELECT user_id,phone,active FROM guests LIMIT 1')
     else:
         db.executescript('''
         CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, salt TEXT NOT NULL, password_hash TEXT NOT NULL, created DOUBLE PRECISION NOT NULL);
         CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires DOUBLE PRECISION NOT NULL);
         ''')
         init_outbox(db)
+        columns = {r['name'] for r in db.execute('PRAGMA table_info(users)')}
+        if 'role' not in columns:
+            db.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'guest'")
+        if 'active' not in columns:
+            db.execute('ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1')
+        db.execute('''CREATE TABLE IF NOT EXISTS guests (
+            id TEXT PRIMARY KEY, user_id TEXT UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+            name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, phone TEXT NOT NULL DEFAULT '',
+            active INTEGER NOT NULL DEFAULT 1, created DOUBLE PRECISION NOT NULL)''')
+        db.execute("INSERT OR IGNORE INTO guests(id,user_id,name,email,created) SELECT id,id,name,email,created FROM users")
 
 attempts, attempts_lock = {}, threading.Lock()
 
@@ -29,14 +43,73 @@ def public_user(row):
     user = {key: row[key] for key in ('id', 'name', 'email')}
     if 'created' in row.keys():
         user['created'] = row['created']
+    if 'role' in row.keys():
+        user['role'] = row['role']
     return user
 
 def current_user(handler):
     with connect('auth') as db:
-        row = db.execute('SELECT u.id,u.name,u.email,u.created FROM users u JOIN sessions s ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>?', (session_hash(handler), time.time())).fetchone()
+        row = db.execute('SELECT u.id,u.name,u.email,u.created,u.role FROM users u JOIN sessions s ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>? AND u.active=1', (session_hash(handler), time.time())).fetchone()
     if not row:
         raise APIError(401, 'Inicia sesión para continuar.')
     return public_user(row)
+
+
+def guest_data(row):
+    return {key: (bool(row[key]) if key == 'active' else row[key]) for key in ('id','user_id','name','email','phone','active','created')}
+
+
+def manage_guests(handler, path):
+    administrator = current_user(handler)
+    if administrator['role'] != 'admin':
+        raise APIError(403, 'Se requiere una cuenta administradora.')
+    identifier = path.removeprefix('/guests/').strip('/') if path != '/guests' else None
+    if handler.command == 'GET' and identifier is None:
+        with connect('auth') as db:
+            rows = db.execute('SELECT * FROM guests ORDER BY created DESC,id').fetchall()
+        return handler.respond(200, {'guests':[guest_data(r) for r in rows]})
+    if handler.command == 'POST' and identifier is None:
+        data = handler.body()
+        name = validation.text(data.get('name'), 'El nombre', 80, 2)
+        email = validation.email(data.get('email'))
+        phone = validation.text(data.get('phone',''), 'El teléfono', 30, 0)
+        identifier = str(uuid.uuid4())
+        try:
+            with connect('auth') as db:
+                db.execute('INSERT INTO guests(id,name,email,phone,created) VALUES (?,?,?,?,?)', (identifier,name,email,phone,time.time()))
+                row = db.execute('SELECT * FROM guests WHERE id=?',(identifier,)).fetchone()
+        except INTEGRITY_ERRORS:
+            raise APIError(409, 'Ya existe un huésped con ese correo.') from None
+        return handler.respond(201, {'guest':guest_data(row)})
+    if handler.command in ('PATCH','DELETE') and identifier:
+        data = handler.body() if handler.command == 'PATCH' else {}
+        if set(data) - {'name','email','phone','active'}:
+            raise APIError(400, 'Solo se pueden modificar los datos del huésped.')
+        try:
+            with connect('auth') as db:
+                row = db.execute('SELECT * FROM guests WHERE id=?',(identifier,)).fetchone()
+                if not row:
+                    raise APIError(404, 'Huésped no encontrado.')
+                if row['user_id']:
+                    owner = db.execute('SELECT role FROM users WHERE id=?',(row['user_id'],)).fetchone()
+                    if owner['role'] == 'admin':
+                        raise APIError(409, 'Las cuentas administradoras se gestionan por el operador, no como huéspedes.')
+                    if 'email' in data and validation.email(data['email']) != row['email']:
+                        raise APIError(409, 'El correo de una cuenta vinculada no se cambia desde administración.')
+                name = validation.text(data.get('name',row['name']), 'El nombre',80,2)
+                email = validation.email(data.get('email',row['email']))
+                phone = validation.text(data.get('phone',row['phone']), 'El teléfono',30,0)
+                enabled = 0 if handler.command == 'DELETE' else validation.active(data.get('active',bool(row['active'])))
+                db.execute('UPDATE guests SET name=?,email=?,phone=?,active=? WHERE id=?',(name,email,phone,enabled,identifier))
+                if row['user_id']:
+                    db.execute('UPDATE users SET name=?,active=? WHERE id=?',(name,enabled,row['user_id']))
+                    if not enabled:
+                        db.execute('DELETE FROM sessions WHERE user_id=?',(row['user_id'],))
+                row = db.execute('SELECT * FROM guests WHERE id=?',(identifier,)).fetchone()
+        except INTEGRITY_ERRORS:
+            raise APIError(409, 'Ya existe un huésped con ese correo.') from None
+        return handler.respond(200, {'guest':guest_data(row)})
+    raise APIError(405, 'Método no permitido para huéspedes.')
 
 def session_cookie(token, max_age=SESSION_SECONDS):
     secure = '; Secure' if os.environ.get('COOKIE_SECURE') == '1' else ''
@@ -46,6 +119,9 @@ class Auth(Handler):
     service_name = 'autenticacion'
     database_name = 'auth'
     def route(self):
+        path = urlsplit(self.path).path
+        if path == '/guests' or path.startswith('/guests/'):
+            return manage_guests(self,path)
         if self.command == 'GET' and self.path == '/auth/me':
             return self.respond(200, {'user': current_user(self)})
         if self.command == 'GET' and self.path.startswith('/internal/users/'):
@@ -73,6 +149,8 @@ class Auth(Handler):
                 raise APIError(429, 'Demasiados intentos. Espera un minuto.')
             attempts[client] = recent + [now]
         data = self.body()
+        if set(data) - {'name','email','password'}:
+            raise APIError(400, 'El registro no permite asignar roles ni permisos.')
         email, password = data.get('email', ''), data.get('password', '')
         if not isinstance(email, str) or not isinstance(password, str):
             raise APIError(400, 'Correo o contraseña inválidos.')
@@ -93,7 +171,14 @@ class Auth(Handler):
                 uid, salt = str(uuid.uuid4()), secrets.token_hex(16)
                 derived = password_hash(password, salt)
                 try:
-                    db.execute('INSERT INTO users VALUES (?,?,?,?,?,?)', (uid, name.strip(), email, salt, derived, time.time()))
+                    db.execute('INSERT INTO users(id,name,email,salt,password_hash,created) VALUES (?,?,?,?,?,?)', (uid, name.strip(), email, salt, derived, time.time()))
+                    profile = db.execute('SELECT id,active FROM guests WHERE email=?',(email,)).fetchone()
+                    if profile and not profile['active']:
+                        raise APIError(409, 'El registro de huésped está inactivo. Contacta con administración.')
+                    if profile:
+                        db.execute('UPDATE guests SET user_id=?,name=? WHERE id=?',(uid,name.strip(),profile['id']))
+                    else:
+                        db.execute('INSERT INTO guests(id,user_id,name,email,created) VALUES (?,?,?,?,?)',(uid,uid,name.strip(),email,time.time()))
                 except INTEGRITY_ERRORS:
                     raise APIError(409, 'No se puede registrar esta cuenta. Intenta iniciar sesión.') from None
                 row = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
@@ -103,6 +188,8 @@ class Auth(Handler):
                 derived = password_hash(password, salt)
                 if not row or not hmac.compare_digest(derived, row['password_hash']):
                     raise APIError(401, 'Correo o contraseña incorrectos.')
+                if not row['active']:
+                    raise APIError(403, 'Esta cuenta está inactiva. Contacta con administración.')
             token = secrets.token_urlsafe(32)
             db.execute('DELETE FROM sessions WHERE expires<=?', (time.time(),))
             # Rota la sesión presentada para evitar conservar la sesión anterior.

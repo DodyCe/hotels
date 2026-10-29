@@ -4,15 +4,31 @@ Actualizado el **29 de octubre de 2026**. Este es el documento central de contex
 
 Los resultados de ejecución que se citan conservan sus fechas. Tener código escrito, un proveedor configurado o un commit publicado no significa haber completado un despliegue público ni todos los entregables.
 
-### Avance del 29 de octubre — administración, Docker y consola OpenAPI
+### Desarrollo del 29 de octubre de 2026 — administración, Docker y OpenAPI
 
-El usuario pidió completar esos tres puntos funcionales antes de organizar el documento de entrega. La nueva versión está publicada en la rama `codex/administracion-docker-openapi` (código validado `ca54b04`, contexto `c9db1f2`) y se conserva en el checkout `C:\Users\DODY\Documents\Codex\2026-10-15\rev\work\hotels-review-oct28-f838cbb`. Incluye administración de hoteles, habitaciones, huéspedes e inventario; roles verificados por Auth; retiros lógicos; recuperación de altas pendientes; y Swagger UI local con contratos públicos e internos separados.
+El usuario pidió terminar primero los puntos funcionales: administración, ejecución con Docker y documentación interactiva de APIs; el documento de entrega se organizará después. El trabajo se desarrolló en `codex/administracion-docker-openapi` mientras se preparaban y comprobaban las migraciones de las bases existentes, y se incorporó a `main` tras la validación remota. La aplicación normal se utiliza en el puerto 8080; la vista temporal de 8081 quedó detenida.
 
-Aprobaron 96 comprobaciones HTTP con SQLite aislado, 11 de configuración, nueve de migración y dos de OpenAPI. La ejecución [40930179895](https://github.com/DodyCe/hotels/actions/runs/40930179895) aprobó los cuatro trabajos de CI, incluido Docker Compose con siete contenedores sanos y 13 comprobaciones del flujo de negocio. Son 131 comprobaciones de esta etapa, sin usar correo ni credenciales reales en Docker. El panel se probó desde navegador con alta de hotel/habitación/huésped, retiro/reactivación, consulta protegida desde Swagger y tamaños móvil/escritorio sin desbordamiento. Las capturas están en `rev/work`.
+Se implementaron roles `guest`/`admin`, perfiles de huéspedes, CRUD administrativo de hoteles y habitaciones, ajustes de inventario que respetan las reservas, retiros lógicos y revocación de sesiones de huéspedes desactivados. El registro público no acepta roles. `tools/set_admin.py` permite promover una cuenta existente por el canal del operador y revoca sus sesiones anteriores. El usuario indicó su cuenta real registrada y confirmó su promoción; ya se ejecutó correctamente, sin publicar el correo ni crear contraseñas predeterminadas.
 
-La migración nueva de Habitaciones ya se aplicó, conservó sus seis filas y verificó RLS y el permiso UPDATE. Su respaldo quedó en `data/backups/rooms-admin-20261029T182301Z/rooms.json`. **Faltan las migraciones de Auth y Catálogo, porque el conector Supabase caducó y aún no hay acceso administrativo disponible para ambos.** También falta que el usuario indique qué correo de su cuenta Hotels será administrador. Solo se creó/promovió una cuenta ficticia en los datos aislados de QA.
+La nueva administración está en `web/admin.html`. El alta de habitación conserva un estado pendiente si Inventario falla, se reintenta por API y no ofrece la habitación hasta confirmar sus unidades. No hay acceso directo a bases ajenas. Se aplicaron las migraciones de columnas/perfiles de Auth, Catálogo y Habitaciones y dos migraciones posteriores de políticas de edición; se conservan las seis bases existentes.
 
-La vista nueva funciona en `http://127.0.0.1:8081/`, con SQLite temporal y SMTP desactivado. `main` y la instancia normal de 8080 mantienen el backend estable con las seis bases Supabase. Se devolvió la carpeta principal a `main` para que siga arrancando normalmente; no se debe fusionar/activar el backend nuevo hasta aplicar las dos migraciones pendientes y probar de nuevo los seis PostgreSQL. La rama conserva las migraciones, el panel y la explicación completa de esta etapa. El conector GitHub rechazó crear un PR con HTTP 403; la rama se publicó mediante Git y CI se activó directamente para pushes de ramas.
+Se agregaron Swagger UI 5.34.0 y PyYAML 6.0.3. El visor `web/docs.html` sirve el contrato público y uno interno separado; el primero permite probar el Gateway usando la sesión actual y el segundo solo documenta la comunicación privada. Swagger se sirve desde los archivos oficiales locales, con licencia, versión fijada y bundle gzip; no carga una CDN ni requiere Node para ejecutar Hotels. Los secretos internos nunca aparecen en esos contratos.
+
+Verificaciones locales: 96 comprobaciones HTTP con SQLite temporal, 11 de configuración, nueve de migración, dos de OpenAPI, Ruff y ESLint aprobados. Se utilizó una vista de QA aislada en `http://127.0.0.1:8081/`, con datos temporales y SMTP desactivado; se detuvo al iniciar la validación remota final. La nueva suite `tests/compose.py` construye y prueba siete contenedores en un proyecto aleatorio y elimina solo sus volúmenes de prueba. Docker Desktop figura registrado en Windows, pero no se encontraron sus ejecutables; la ejecución real de contenedores se verificó en GitHub Actions.
+
+**Docker verificado:** la ejecución [40930179895](https://github.com/DodyCe/hotels/actions/runs/40930179895), correspondiente al código `ca54b04`, completó correctamente los cuatro trabajos de GitHub Actions. Docker construyó y arrancó siete contenedores sanos y aprobó 13 comprobaciones de registro, sesión, reservas, cancelación, promoción por operador, administración y Swagger. Estas 13 comprobaciones usan seis SQLite aisladas dentro de los contenedores, sin correo ni credenciales reales; no se afirma que prueben las nuevas migraciones en los seis PostgreSQL. Sumadas a las suites HTTP/configuración/migración/OpenAPI, son 131 comprobaciones de esta etapa. El conector GitHub rechazó crear el PR con HTTP 403; la rama sí quedó publicada y se activó CI para pushes de ramas.
+
+**Revisión visual:** se crearon hotel, habitación con inventario y huésped temporales desde el panel; se retiró y reactivó al huésped. Swagger ejecutó `GET /guests` con HTTP 200 usando la sesión administradora de QA y el visor interno no mostró controles de ejecución. No hubo errores/advertencias de consola. El panel se revisó a 390 × 844 y 1366 × 900 sin desbordamiento horizontal; las capturas están en `rev/work/hotels-administracion.png` y `hotels-admin-movil.png`. La cuenta administradora de QA existe solo en esos datos locales desechables.
+
+**Migración de Habitaciones aplicada:** se pudo utilizar su configuración administrativa privada existente. Se respaldaron las seis filas en `data/backups/rooms-admin-20261029T182301Z/rooms.json`, se aplicó `20261029180227_hotels_admin_rooms.sql` y se comprobaron los valores originales conservados, el permiso UPDATE de su rol y RLS habilitado.
+
+**Migración de Auth aplicada:** el usuario abrió su cuenta de Auth/Notificaciones en el navegador y confirmó los permisos de la nueva tabla privada de huéspedes. Se ejecutó `20261029180220_hotels_admin_auth.sql` desde el editor SQL autorizado, conservando los dos usuarios originales y creando sus dos perfiles. Se verificaron RLS y la ausencia de acceso de `anon`/`authenticated`; el respaldo previo está en `data/backups/admin-activation-20261029T192505Z/`. Después se promovió la cuenta real indicada por el usuario mediante el comando de operador y se revocaron sus sesiones anteriores. Notificaciones conserva su base independiente y no necesitó migración en esta etapa.
+
+**Catálogo migrado y RLS corregido:** el usuario abrió la segunda cuenta y se aplicó `20261029180224_hotels_admin_catalog.sql` desde su editor SQL. Se conservaron los tres hoteles y sus documentos. La primera integración aprobó 73 comprobaciones, pero una prueba adicional con los roles reales detectó que conceder UPDATE no bastaba: faltaba la política RLS de UPDATE en Catálogo y Habitaciones, por lo que las ediciones no modificaban filas. Se aplicaron las migraciones posteriores `20261029194429_hotels_catalog_backend_update_policy.sql` y `20261029194451_hotels_rooms_backend_update_policy.sql`, exclusivamente para sus roles de backend y con `USING` y `WITH CHECK`. Seis comprobaciones transaccionales confirmaron inserción, edición, retiro lógico y rollback en Auth/Catálogo/Habitaciones sin dejar datos temporales. Se incorporaron a la suite de integración PostgreSQL como regresión. Las conexiones de aplicación siguen limitadas; no se modificaron credenciales ni se habilitó acceso público a los esquemas. El conector Supabase continuó solicitando reautenticación; las sesiones web autorizadas y la conexión administrativa privada ya disponible para Habitaciones permitieron completar los cambios.
+
+**Integración remota final:** `tests/integration.py --six-postgres` aprobó 79 comprobaciones, incluyendo las seis nuevas de escritura/rollback con los roles reales. SMTP estuvo desactivado y la instancia normal detenida durante la prueba. La limpieza terminó con código 0; se verificaron los dos usuarios originales, sus dos perfiles de huéspedes, tres hoteles y seis habitaciones, y se compararon los datos originales con el respaldo. Después se arrancó la versión integrada desde `optativa/hotels`, conservando el `.env` privado y la configuración de correo. El administrador indicado debe iniciar sesión nuevamente para usar `/admin.html`; Swagger se abre en `/docs.html`. La organización del documento formal y el despliegue público continúan pendientes.
+
+**Arranque normal comprobado:** Gateway y seis servicios devolvieron health HTTP 200; los seis servicios declararon `postgresql`. Las rutas de administración, Swagger y ambos contratos respondieron 200, el bundle gzip local se validó y la consulta de huéspedes sin sesión respondió 401. Se comprobaron los conteos finales de las seis bases: Auth 2 usuarios/2 huéspedes/0 sesiones/2 eventos; Notificaciones 6 mensajes; Catálogo 3 hoteles; Habitaciones 6 tipos; Reservas 2 reservas/4 eventos; Inventario 6 registros/1 asignación. Los datos de las comprobaciones no quedaron en las bases y no se enviaron mensajes reales nuevos.
 
 ### Actualización del 26 de octubre de 2026 — migración de Reservas e Inventario
 
@@ -147,7 +163,7 @@ Este esquema ayuda a explicar el sistema. Los diagramas formales de arquitectura
 
 ## 5. Microservicios y propiedad de los datos
 
-1. **Autenticación — 8101 — `services/auth.py`.** Registra cuentas, valida contraseñas, crea/revoca sesiones y conserva el correo del usuario. Usa el proyecto PostgreSQL `hotels-auth`: esquema privado `hotels_auth`, tablas `users`, `sessions` y `outbox`.
+1. **Autenticación — 8101 — `services/auth.py`.** Registra cuentas, valida contraseñas, crea/revoca sesiones, comprueba roles y administra los perfiles de huéspedes. Usa el proyecto PostgreSQL `hotels-auth`: esquema privado `hotels_auth`, tablas `users`, `guests`, `sessions` y `outbox`. Un perfil puede existir sin credenciales; su vínculo opcional con una cuenta permanece en esta misma base.
 2. **Notificaciones — 8102 — `services/notifications.py`.** Recibe eventos, obtiene el destinatario en Auth, guarda mensajes y gestiona SMTP y reintentos. Usa otro proyecto PostgreSQL, `hotels-notifications`: esquema privado `hotels_notifications`, tabla `messages`.
 3. **Reservas — 8103 — `services/reservations.py`.** Guarda propietario, habitación, fechas, huéspedes, importe y estado de la operación, además de su outbox. Usa PostgreSQL en `hotels-reservations`, esquema privado `hotels_reservations`, tablas `reservations` y `outbox`.
 4. **Catálogo de hoteles — 8104 — `services/catalog.py`.** Guarda establecimientos, ubicación, descripciones, fuentes y créditos; la tabla `hotels` conserva documentos JSON. Usa PostgreSQL en `hotels-catalog`, esquema `hotels_catalog`, tabla `hotels`. Las habitaciones, tarifas y ocupaciones pertenecen a otros servicios.
@@ -175,6 +191,8 @@ Los archivos anteriores `auth.sqlite3`, `notifications.sqlite3`, `catalog.sqlite
 ## 7. Seguridad implementada y JWT pendiente
 
 Las contraseñas se guardan con **scrypt y sal aleatoria por usuario**, no como texto legible. El código usa `n=32768`, `r=8`, `p=1` y salida de 32 bytes. Las sesiones son tokens aleatorios de ocho horas: solo se guarda su hash SHA-256; cerrar sesión lo revoca. La cookie es `HttpOnly`, `SameSite=Strict` y admite `Secure` con `COOKIE_SECURE=1` para HTTPS.
+
+Los roles `guest`/`admin` se resuelven en Auth en cada operación administrativa. El registro público no permite elegir rol. La promoción de una cuenta registrada se ejecuta por el operador con `python tools/set_admin.py --email <correo>` y revoca sus sesiones anteriores. Desactivar un huésped vinculado impide su inicio de sesión y revoca las sesiones; las cuentas administradoras no se pueden desactivar mediante ese endpoint.
 
 Las APIs comprueban el propietario de reservas y avisos, y Auth limita intentos. Los errores y logs evitan mostrar contraseñas o cookies. El Gateway comprueba host y origen. Las credenciales PostgreSQL solo llegan al servicio dueño y las variables SMTP solo a Notificaciones.
 
@@ -308,7 +326,7 @@ Se valida TLS. Para un proveedor con puerto 465 se usa `SMTP_SECURITY=ssl`. Gmai
 
 ## 12. API y respuestas
 
-Todas las rutas usan JSON. El Gateway elimina `/api` al reenviar la solicitud:
+Las rutas de API usan JSON. El Gateway elimina `/api` al reenviar la solicitud:
 
 - `GET /api/hotels` y `GET /api/hotels/{id}`: catálogo.
 - `GET /api/rooms?hotelId={id}&guests=2` y `GET /api/rooms/{id}`: tipos, capacidad y tarifa; los filtros son opcionales.
@@ -319,13 +337,14 @@ Todas las rutas usan JSON. El Gateway elimina `/api` al reenviar la solicitud:
 - `POST /api/reservations`: `{roomId,checkin,checkout,guests}`; `hotelId` opcional debe coincidir con la habitación. Precio y propietario proceden del servidor.
 - `GET /api/reservations`: reservas propias; `POST /api/reservations/{id}/cancel`: cancelación propia.
 - `GET /api/notifications`: mensajes y estados propios.
+- Administración con rol `admin`: `POST /api/hotels`, `PATCH`/`DELETE /api/hotels/{id}`, operaciones equivalentes en `/api/rooms`, `GET`/`POST /api/guests`, `PATCH`/`DELETE /api/guests/{id}` y `PUT /api/inventory/{roomId}`. DELETE realiza un retiro lógico. El parámetro `includeInactive=true` solo se permite a administradores.
 - `GET /health` en cada proceso: salud básica; Reservas también informa de su preparación/migración.
 
 `/internal/allocate`, `/internal/release`, `/internal/reconcile`, los eventos y las consultas internas de usuario son comunicación entre servicios, protegida con clave y sin rutas públicas equivalentes en el Gateway.
 
 Estados relevantes: 202 pendiente, 400 datos inválidos, 401 sin sesión, 403 acceso no permitido, 404 recurso inexistente o ajeno, 409 conflicto, 429 exceso de intentos y 503 servicio no disponible. Los ejemplos de identificador incluyen `ghl-monteria-principal` y `ghl-monteria-alternativa`.
 
-El contrato completo, con esquemas, parámetros, validaciones y códigos por ruta, está en [`docs/openapi.yaml`](docs/openapi.yaml) (OpenAPI 3.1). Puede abrirse en cualquier visor OpenAPI, por ejemplo el editor de Swagger. La web no sirve una interfaz Swagger: la CSP del Gateway solo permite scripts propios. `/auth/me` incluye `created`, la fecha de alta en segundos Unix. Catálogo y Habitaciones exponen consultas; no se implementó administración con permisos de edición ni un panel administrativo completo.
+El contrato público completo está en [`docs/openapi.yaml`](docs/openapi.yaml) (OpenAPI 3.1), y el privado en `docs/internal-openapi.yaml`. El visor Swagger UI local se abre en `/docs.html`: permite probar la API pública con la sesión vigente y muestra el contrato interno sin habilitar su ejecución. Los scripts se sirven localmente y respetan la CSP. `/auth/me` incluye `created` y `role`; la autorización administrativa se resuelve nuevamente en el servidor en cada operación. El panel `/admin.html` administra hoteles, habitaciones, inventario y huéspedes, con edición y retiro/reactivación.
 
 ## 13. Pruebas y evidencia conservada
 
@@ -351,9 +370,9 @@ node --check web/app.js
 git diff --check
 ```
 
-Se corrigió durante el desarrollo un bloqueo de archivos SQLite en Windows cerrando conexiones explícitamente. `node --check` y la revisión de whitespace pasaron en la actualización del 17. La revisión inicial en navegador incluyó cuenta, reserva, notificación, cancelación, cierre de sesión y carga de fotos; se observó un ancho móvil de 390 px sin desbordamiento. Una revisión visual completa de la versión final en escritorio y móvil sigue pendiente. Las capturas antiguas no demuestran que la versión actual esté validada.
+Se corrigió durante el desarrollo un bloqueo de archivos SQLite en Windows cerrando conexiones explícitamente. `node --check` y la revisión de whitespace pasaron en la actualización del 17. La revisión inicial en navegador incluyó cuenta, reserva, notificación, cancelación, cierre de sesión y carga de fotos. El panel administrativo se revisó el 29 en escritorio y móvil con datos de QA, sin desbordamiento; los resultados actuales se detallan al principio. Las capturas conservan su fecha y entorno.
 
-Los resultados del 17 de octubre son históricos. En la consolidación documental del 22 no se repitieron las 123 comprobaciones; la actualización de código del 23 sí volvió a verificar ambas modalidades, como se detalla a continuación. No se ha validado carga, funcionamiento público ni contenedores. El SMTP real se comprobó aparte y el usuario confirmó llegada; no se enviaron correos nuevos como parte de esta limpieza.
+Los resultados del 17 de octubre son históricos. En la consolidación documental del 22 no se repitieron las 123 comprobaciones; la actualización de código del 23 sí volvió a verificar ambas modalidades, como se detalla a continuación. No se han validado carga ni funcionamiento público; los contenedores sí se verificaron el 29 en CI. El SMTP real se comprobó aparte y el usuario confirmó llegada; no se enviaron correos nuevos como parte de esta limpieza ni de las pruebas de administración.
 
 ### Verificación del 23 de octubre
 
@@ -413,13 +432,13 @@ npm ci
 npm run lint
 ```
 
-Node solo se usa para ESLint; la web no depende de Node para funcionar. Las versiones de las herramientas están fijadas en `requirements-dev.txt`, `package.json` y `package-lock.json`.
+Node se usa para herramientas de desarrollo como ESLint y obtención de los archivos fijados de Swagger UI; la web no depende de Node para funcionar. Las versiones están fijadas en `requirements-dev.txt`, `package.json` y `package-lock.json`.
 
 ## 14. Docker y alojamiento futuro
 
 Se incluyen siete componentes en Compose: Gateway y seis servicios. Solo el Gateway publica un puerto al anfitrión; las SQLite usan volúmenes separados. Las conexiones PostgreSQL y SMTP se asignan únicamente a sus servicios correspondientes. La imagen ejecuta con un usuario sin privilegios.
 
-Para una futura validación, configura una clave `INTERNAL_API_KEY` de al menos 32 caracteres, conserva las conexiones y ejecuta `docker compose up --build`; abre <http://127.0.0.1:8080/>. `docker compose down` detiene los contenedores; no usar opciones que eliminen volúmenes si se deben conservar los datos. **La ejecución de Docker está pendiente**, aunque los archivos existan.
+Para ejecutar Compose en una instalación con Docker disponible, configura una clave `INTERNAL_API_KEY` de al menos 32 caracteres, conserva las conexiones y ejecuta `docker compose up --build`; abre <http://127.0.0.1:8080/>. `docker compose down` detiene los contenedores; no usar opciones que eliminen volúmenes si se deben conservar los datos. **Docker ya se ejecutó y verificó en GitHub Actions** con siete contenedores y 13 comprobaciones de negocio mediante `tests/compose.py`, usando SQLite temporal y SMTP desactivado. La ejecución de la versión configurada con las seis bases Supabase sigue siendo local mediante Python; no se confunde esa prueba de Compose con un despliegue público o con contenedores conectados a los datos reales.
 
 El presupuesto acordado es gratuito. Los seis servicios ya tienen sus bases remotas independientes en Supabase. El destino será **frontend + Gateway + seis microservicios + seis bases independientes en la nube**. Subir únicamente las bases no aloja la aplicación completa.
 
@@ -469,10 +488,10 @@ La sección final de entregables pide: código fuente; repositorio e historial G
 Este documento reúne contexto y material útil para varios de ellos; **no completa automáticamente la entrega formal**. Falta:
 
 1. Preparar la evidencia final del frontend: las pruebas de interfaz con servicios reales, la conexión a los seis PostgreSQL y los flujos de integración ya se verificaron el 28 de octubre; falta organizar el material de la demostración formal.
-2. Revisar el alcance de administración de hoteles, habitaciones y huéspedes respecto de la guía; las consultas actuales no son un CRUD administrativo completo.
+2. Organizar la evidencia del panel administrativo ya implementado: altas, consultas, ediciones, retiros lógicos y reactivación de hoteles, habitaciones y huéspedes, además del ajuste de inventario.
 3. Elaborar los modelos de datos formales por servicio. La especificación OpenAPI ya está en `docs/openapi.yaml`.
 4. Preparar los dos diagramas solicitados y el documento final con decisiones, seguridad y comunicación asíncrona justificadas.
-5. Ejecutar y verificar Docker Compose y reproducibilidad en otra instalación.
+5. Incorporar la ejecución Docker Compose ya aprobada en CI a las evidencias y al manual de instalación.
 6. Capturar evidencias actuales y correo recibido, completar manual, presentación y demostración integral.
 7. Implementar, cuando se autorice, confirmación de correo y recuperación de contraseña; evaluar JWT antes de modificar la autenticación.
 8. Seleccionar alojamiento gratuito compatible y verificar el despliegue público del frontend, Gateway y microservicios. La migración de las seis bases a Supabase ya está completada.

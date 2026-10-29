@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 permissions:
@@ -41,6 +40,7 @@ jobs:
       - run: python tests/integration.py
       - run: python tests/database_config.py
       - run: python tests/migration.py
+      - run: python tests/openapi.py
 
   web:
     name: Frontend (ESLint y sintaxis)
@@ -54,3 +54,14 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: node --check web/app.js && node --check web/catalog.js
+
+  docker:
+    name: Docker Compose (siete contenedores y flujo completo)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python tests/compose.py

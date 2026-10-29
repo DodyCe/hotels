@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#173f3b">
+  <title>Hotels · Administración</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="hotels.css">
+  <link rel="stylesheet" href="admin.css">
+  <script src="admin.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#admin-content">Saltar al contenido</a>
+  <header class="header">
+    <a class="brand" href="index.html" aria-label="Hotels, inicio"><span class="brand-mark" aria-hidden="true">h.</span><span>hotels<span class="brand-caption">ADMINISTRACIÓN</span></span></a>
+    <nav aria-label="Navegación de administración"><a href="index.html">Volver a Hotels ↗</a><a href="docs.html">Consultar API</a></nav>
+    <span id="admin-user">Verificando acceso…</span>
+  </header>
+  <main id="admin-content" class="admin-shell">
+    <section class="admin-intro"><p class="eyebrow">GESTIÓN DE ALOJAMIENTOS</p><h1>Todo listo para recibir.</h1><p>Gestiona tus hoteles, habitaciones y huéspedes desde un solo lugar.</p></section>
+    <p id="admin-status" role="status" class="admin-status">Comprobando tu cuenta…</p>
+    <section id="admin-workspace" hidden>
+      <div class="admin-stats" id="admin-stats"></div>
+      <div class="admin-toolbar"><div class="admin-tabs" role="group" aria-label="Sección de administración"><button type="button" data-tab="hotels" aria-pressed="true">Hoteles</button><button type="button" data-tab="rooms" aria-pressed="false">Habitaciones</button><button type="button" data-tab="guests" aria-pressed="false">Huéspedes</button></div><button type="button" class="button primary" id="add-record">Nuevo hotel</button></div>
+      <div class="admin-controls"><label>Buscar<input id="admin-search" type="search" placeholder="Nombre, correo o ubicación"></label><label class="admin-check"><input id="include-archived" type="checkbox"> Mostrar inactivos</label><button type="button" class="button secondary" id="reload-records">Actualizar</button></div>
+      <div id="admin-records" class="admin-records" aria-live="polite"></div>
+      <p class="admin-footnote">Al retirar un registro se desactiva su uso futuro. Las reservas y sus datos históricos se conservan. Los huéspedes sin cuenta pueden registrarse posteriormente con su correo.</p>
+    </section>
+  </main>
+  <dialog id="admin-editor" aria-labelledby="editor-title"><div class="modal-header"><strong>hotels.</strong><button type="button" class="icon-button" id="close-editor" aria-label="Cerrar formulario">✕</button></div><div id="editor-body"></div></dialog>
+</body>
+</html>

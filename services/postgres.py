@@ -15,7 +15,7 @@ SETTINGS = {'auth': 'AUTH_DATABASE_URL', 'notifications': 'NOTIFICATIONS_DATABAS
             'catalog': 'CATALOG_DATABASE_URL', 'rooms': 'ROOMS_DATABASE_URL',
             'reservations': 'RESERVATIONS_DATABASE_URL', 'availability': 'AVAILABILITY_DATABASE_URL'}
 SCHEMAS = {name: 'hotels_' + name for name in SETTINGS}
-TABLES = {'auth': ('users', 'sessions', 'outbox'), 'notifications': ('messages',),
+TABLES = {'auth': ('users', 'sessions', 'outbox', 'guests'), 'notifications': ('messages',),
           'catalog': ('hotels',), 'rooms': ('rooms',),
           'reservations': ('reservations', 'outbox'), 'availability': ('inventory', 'allocations')}
 

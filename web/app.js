@@ -99,6 +99,7 @@ function visibleHotels() {
   return hotels.filter((h) => state.filter === 'all' || h.tags.includes(state.filter)).sort((a,b) => state.sort === 'price' ? a.price-b.price : 0);
 }
 function renderAccount() {
+  $('#admin-link').hidden = state.user?.role !== 'admin';
   $('#login-button').textContent = state.user ? 'Mi cuenta ↗' : 'Ingresar / Registrarse ↗';
   $('#account-note').textContent = state.user ? `Las confirmaciones se asociarán al correo de tu cuenta: ${state.user.email}` : 'Inicia sesión para guardar tus reservas y recibir las confirmaciones en tu correo.';
   updateButton();

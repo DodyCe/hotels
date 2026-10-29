@@ -2,9 +2,10 @@
 import datetime as dt
 import json
 import postgres
+import validation
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
-from common import APIError, Handler, connect, serve, validate_dates
+from common import APIError, Handler, admin_for, connect, serve, validate_dates
 
 seed = json.loads((Path(__file__).resolve().parents[1] / 'seed' / 'inventory.json').read_text(encoding='utf-8'))
 with connect('availability') as db:
@@ -51,11 +52,55 @@ def validate_id(value):
         raise APIError(400, 'Identificador de reserva inválido.')
     return value
 
+
+def future_peak(db, room):
+    today = dt.datetime.now(dt.timezone(dt.timedelta(hours=-5))).date().isoformat()
+    rows = db.execute("SELECT checkin,checkout FROM allocations WHERE room_id=? AND status='Asignada' AND checkout>?",(room,today)).fetchall()
+    changes = {}
+    for row in rows:
+        start = max(today,row['checkin'])
+        changes[start] = changes.get(start,0)+1
+        changes[row['checkout']] = changes.get(row['checkout'],0)-1
+    occupied = peak = 0
+    for day in sorted(changes):
+        occupied += changes[day]
+        peak = max(peak,occupied)
+    return peak
+
 class Availability(Handler):
     service_name = 'disponibilidad-inventario'
     database_name = 'availability'
     def route(self):
         url = urlsplit(self.path)
+        if self.command == 'POST' and url.path == '/internal/inventory':
+            data = self.body()
+            room = validation.text(data.get('roomId'),'La habitación',120)
+            total = validation.integer(data.get('total'),'Las unidades',1,1000)
+            with connect('availability') as db:
+                if postgres.database_url('availability'):
+                    db.execute("SELECT pg_advisory_xact_lock(hashtextextended(?,0))",('inventory:'+room,))
+                    position = db.execute('SELECT COALESCE(MAX(sort_order),-1)+1 AS position FROM inventory').fetchone()['position']
+                    db.execute('INSERT INTO inventory(room_id,total,sort_order) VALUES (?,?,?) ON CONFLICT(room_id) DO NOTHING',(room,total,position))
+                else:
+                    db.execute('BEGIN IMMEDIATE')
+                    db.execute('INSERT OR IGNORE INTO inventory(room_id,total) VALUES (?,?)',(room,total))
+                row = db.execute('SELECT total FROM inventory WHERE room_id=?',(room,)).fetchone()
+            return self.respond(200,{'inventory':{'roomId':room,'total':row['total']}})
+        if self.command == 'PUT' and url.path.startswith('/inventory/'):
+            admin_for(self)
+            room = url.path.removeprefix('/inventory/')
+            total = validation.integer(self.body().get('total'),'Las unidades',1,1000)
+            with connect('availability') as db:
+                if not postgres.database_url('availability'):
+                    db.execute('BEGIN IMMEDIATE')
+                lock_room(db,room)
+                if not db.execute('SELECT room_id FROM inventory WHERE room_id=?',(room,)).fetchone():
+                    raise APIError(404,'Habitación no registrada en inventario.')
+                peak = future_peak(db,room)
+                if total < peak:
+                    raise APIError(409,'Hay '+str(peak)+' unidades comprometidas; no puedes reducir el inventario por debajo de las reservas vigentes.')
+                db.execute('UPDATE inventory SET total=? WHERE room_id=?',(total,room))
+            return self.respond(200,{'inventory':{'roomId':room,'total':total}})
         if self.command == 'GET' and url.path == '/inventory':
             with connect('availability') as db:
                 ordering = 'sort_order,room_id' if postgres.database_url('availability') else 'rowid'
