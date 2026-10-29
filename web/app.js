@@ -15,7 +15,7 @@ const hotelToday = () => {
 const addDays = (iso, days) => { const date = new Date(iso + 'T12:00:00'); date.setDate(date.getDate() + days); return localISO(date); };
 const today = hotelToday();
 $('#checkin').value = addDays(today, 7); $('#checkout').value = addDays(today, 10); $('#checkin').min = today;
-const state = { checkin: $('#checkin').value, checkout: $('#checkout').value, guests: 2, filter: 'all', sort: 'recommended', selected: hotelCatalog[0].id, availability: {}, roomChoice: {}, user: null, online: false };
+const state = { checkin: $('#checkin').value, checkout: $('#checkout').value, guests: 2, filter: 'all', sort: 'recommended', maxPrice: 0, selected: hotelCatalog[0].id, availability: {}, roomChoice: {}, user: null, online: false };
 let toastTimer;
 let modalOpener = null;
 
@@ -50,7 +50,7 @@ async function api(path, body) {
 function nights() { return Math.round((Date.parse(state.checkout+'T00:00:00Z')-Date.parse(state.checkin+'T00:00:00Z'))/86400000); }
 function visibleHotels() {
   hotels = hotelCatalog.flatMap((hotel) => {
-    const options = rooms.filter((room) => room.hotelId === hotel.id && room.capacity >= state.guests && (!state.online || state.availability[room.id] > 0));
+    const options = rooms.filter((room) => room.hotelId === hotel.id && room.capacity >= state.guests && (!state.maxPrice || room.price <= state.maxPrice) && (!state.online || state.availability[room.id] > 0));
     const room = options.find((r) => r.id === state.roomChoice[hotel.id]) || options[0];
     if (!room) return [];
     state.roomChoice[hotel.id] = room.id;
@@ -71,7 +71,7 @@ function render() {
   const results = visibleHotels();
   if (!results.some((h) => h.id === state.selected)) state.selected = results[0]?.id || null;
   $('#result-description').textContent = `${results.length} ${results.length === 1 ? 'alojamiento disponible' : 'alojamientos disponibles'} · ${dateText(state.checkin)} – ${dateText(state.checkout)} · ${state.guests} ${state.guests === 1 ? 'adulto' : 'adultos'}`;
-  $('#hotel-list').innerHTML = results.length ? results.map((h) => `<article class="hotel-card ${h.id === state.selected ? 'selected' : ''}"><div class="hotel-image"><img src="${h.image}" alt="Foto ilustrativa de ${h.photographer}; no corresponde a ${h.name}" loading="lazy" referrerpolicy="no-referrer"><span class="hotel-badge">${h.badge}</span><a class="photo-credit" href="${h.photoPage}" target="_blank" rel="noopener noreferrer">Foto ilustrativa · ${h.photographer} / Unsplash ↗</a></div><div class="hotel-content"><div class="hotel-topline"><span class="hotel-location">Montería · ${h.area}</span><span class="local-badge">Montería</span></div><h3>${h.name}</h3><p class="hotel-address">${h.address}</p><p class="hotel-description">${h.description}</p><a class="official-link" href="${h.source}" target="_blank" rel="noopener noreferrer">Información oficial del hotel ↗</a><label class="room-picker">ELIGE TU HABITACIÓN<select data-room-hotel="${h.id}" aria-label="Habitación en ${h.name}">${h.roomOptions.map((r) => `<option value="${r.id}" ${r.id === h.roomId ? 'selected' : ''}>${r.name} · ${money(r.price)}/noche</option>`).join('')}</select></label><p class="room-type">Hasta ${h.capacity} adultos</p><div class="amenities">${h.amenities.map((a) => `<span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>${a}</span>`).join('')}</div><div class="hotel-bottom"><div><p class="price-label">POR NOCHE</p><div class="price">${money(h.price)} <small>/ noche</small></div><span class="availability">Disponible para tus fechas</span></div><button class="select-room" data-hotel="${h.id}" aria-pressed="${h.id === state.selected}" aria-label="${h.id === state.selected ? 'Habitación seleccionada en ' : 'Elegir habitación en '}${h.name}">${h.id === state.selected ? 'Seleccionada <span>✓</span>' : 'Elegir habitación <span>↗</span>'}</button></div></div></article>`).join('') : '<div class="empty"><strong>No encontramos habitaciones con estos criterios.</strong><p>Prueba otras fechas, menos huéspedes o el filtro «Todos los hoteles».</p></div>';
+  $('#hotel-list').innerHTML = results.length ? results.map((h) => `<article class="hotel-card ${h.id === state.selected ? 'selected' : ''}"><div class="hotel-image"><img src="${h.image}" alt="Foto ilustrativa de ${h.photographer}; no corresponde a ${h.name}" loading="lazy" referrerpolicy="no-referrer"><span class="hotel-badge">${h.badge}</span><a class="photo-credit" href="${h.photoPage}" target="_blank" rel="noopener noreferrer">Foto ilustrativa · ${h.photographer} / Unsplash ↗</a></div><div class="hotel-content"><div class="hotel-topline"><span class="hotel-location">Montería · ${h.area}</span><span class="local-badge">Montería</span></div><h3>${h.name}</h3><p class="hotel-address">${h.address}</p><p class="hotel-description">${h.description}</p><a class="official-link" href="${h.source}" target="_blank" rel="noopener noreferrer">Información oficial del hotel ↗</a><label class="room-picker">ELIGE TU HABITACIÓN<select data-room-hotel="${h.id}" aria-label="Habitación en ${h.name}">${h.roomOptions.map((r) => `<option value="${r.id}" ${r.id === h.roomId ? 'selected' : ''}>${r.name} · ${money(r.price)}/noche</option>`).join('')}</select></label><p class="room-type">Hasta ${h.capacity} adultos</p><div class="amenities">${h.amenities.map((a) => `<span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>${a}</span>`).join('')}</div><div class="hotel-bottom"><div><p class="price-label">POR NOCHE</p><div class="price">${money(h.price)} <small>/ noche</small></div><span class="availability">Disponible para tus fechas</span></div><button class="select-room" data-hotel="${h.id}" aria-pressed="${h.id === state.selected}" aria-label="${h.id === state.selected ? 'Habitación seleccionada en ' : 'Elegir habitación en '}${h.name}">${h.id === state.selected ? 'Seleccionada <span>✓</span>' : 'Elegir habitación <span>↗</span>'}</button></div></div></article>`).join('') : '<div class="empty"><strong>No encontramos habitaciones con estos criterios.</strong><p>Prueba otras fechas, menos huéspedes, un precio máximo mayor o el filtro «Todos los hoteles».</p></div>';
   $('#hotel-list').querySelectorAll('img').forEach((image) => image.addEventListener('error', () => {
     image.hidden = true;
     const fallback = document.createElement('span'); fallback.className = 'no-photo'; fallback.textContent = 'Fotografía de referencia no disponible sin conexión.'; image.parentElement.prepend(fallback);
@@ -136,10 +136,23 @@ function showAuth(mode='login', continueBooking=false) {
     });
   });
 }
-function showAccount() {
+const isActive = (r) => !['Cancelada','Rechazada'].includes(r.status);
+const isUpcoming = (r) => isActive(r) && r.checkout > hotelToday();
+async function showAccount() {
   if (!state.user) return showAuth();
-  openModal(`<p class="eyebrow">TU CUENTA</p><h2>Hola, ${escapeHTML(state.user.name)}</h2><div class="auth-details"><strong>Correo de notificaciones</strong><br>${escapeHTML(state.user.email)}</div><p class="modal-hint">Las confirmaciones y cancelaciones se dirigirán a este correo. Tu cuenta y tus reservas se conservan al reiniciar la aplicación.</p><button class="button secondary" id="logout-button">Cerrar sesión</button>`);
+  const since = state.user.created ? new Intl.DateTimeFormat('es-CO', { month: 'long', year: 'numeric', timeZone: 'America/Bogota' }).format(new Date(state.user.created * 1000)) : '';
+  openModal(`<p class="eyebrow">TU CUENTA</p><h2>Hola, ${escapeHTML(state.user.name)}</h2>${since ? `<p>Miembro desde ${since}</p>` : ''}<div class="account-stats" id="account-stats" aria-live="polite"><div><strong id="stat-upcoming">…</strong><span>Próximas estancias</span></div><div><strong id="stat-total">…</strong><span>Reservas en total</span></div></div><div class="auth-details"><strong>Correo de notificaciones</strong><br>${escapeHTML(state.user.email)}</div><p class="modal-hint">Las confirmaciones y cancelaciones se dirigirán a este correo. Tu cuenta y tus reservas se conservan al reiniciar la aplicación.</p><div class="modal-actions"><button class="button secondary" id="account-reservations">Mis reservas</button><button class="button secondary" id="account-notifications">Notificaciones</button></div><button class="button logout-button" id="logout-button">Cerrar sesión</button>`);
+  $('#account-reservations').addEventListener('click', showReservations);
+  $('#account-notifications').addEventListener('click', showNotifications);
   $('#logout-button').addEventListener('click', (event) => withBusy(event.target, async () => { await api('/auth/logout', {}); state.user = null; renderAccount(); $('#modal').close(); toast('Sesión cerrada.'); }));
+  try {
+    const { reservations } = await api('/reservations');
+    if (!$('#account-stats')) return;
+    $('#stat-upcoming').textContent = reservations.filter(isUpcoming).length;
+    $('#stat-total').textContent = reservations.length;
+  } catch {
+    if ($('#account-stats')) $('#account-stats').hidden = true;
+  }
 }
 function showBooking() {
   if (!state.user) return showAuth('login',true);
@@ -165,10 +178,20 @@ async function showReservations() {
   openModal('<h2>Mis reservas</h2><p>Cargando tus reservas…</p>');
   try {
     const data = await api('/reservations');
-    openModal(`<p class="eyebrow">TUS PLANES EN MONTERÍA</p><h2>Mis reservas</h2><p>Consulta tus próximas estancias y el estado de tus reservas.</p><button class="button secondary" id="refresh-reservations">Actualizar reservas</button>${data.reservations.length ? data.reservations.map((r) => `<article class="reservation-item"><h3>${escapeHTML(r.hotel)}</h3><p>${r.id} · <strong>${r.status}</strong><br>${escapeHTML(r.room)}<br>${dateText(r.checkin)} – ${dateText(r.checkout)}<br>${r.guests} ${r.guests === 1 ? 'adulto' : 'adultos'} · ${money(r.total)} COP</p>${['Confirmada','Pendiente'].includes(r.status) ? `<button class="cancel-button" data-cancel="${r.id}">Cancelar reserva</button>` : ''}</article>`).join('') : '<div class="reservation-item"><p>Todavía no tienes reservas. Explora los hoteles para empezar.</p></div>'}`);
+    const list = data.reservations;
+    const groups = [
+      ['Próximas y en curso', list.filter(isUpcoming).sort((a, b) => a.checkin.localeCompare(b.checkin)), true],
+      ['Pasadas', list.filter((r) => isActive(r) && !isUpcoming(r)).sort((a, b) => b.checkout.localeCompare(a.checkout)), false],
+      ['Canceladas y rechazadas', list.filter((r) => !isActive(r)), false],
+    ].filter(([, items]) => items.length);
+    openModal(`<p class="eyebrow">TUS PLANES EN MONTERÍA</p><h2>Mis reservas</h2><p>Consulta tus próximas estancias y el estado de tus reservas.</p><button class="button secondary" id="refresh-reservations">Actualizar reservas</button>${groups.length ? groups.map(([title, items, upcoming]) => `<section class="reservation-group"><h3 class="group-title">${title} <span>${items.length}</span></h3>${items.map((r) => reservationCard(r, upcoming && ['Confirmada','Pendiente'].includes(r.status))).join('')}</section>`).join('') : '<div class="reservation-item"><p>Todavía no tienes reservas. Explora los hoteles para empezar.</p></div>'}`);
     $('#refresh-reservations').addEventListener('click',showReservations);
     document.querySelectorAll('[data-cancel]').forEach((button) => button.addEventListener('click', () => confirmCancel(data.reservations.find((r) => r.id === button.dataset.cancel))));
   } catch (error) { openModal(`<h2>Mis reservas</h2><p>${escapeHTML(error.message)}</p>`); }
+}
+const statusTone = { Confirmada: 'ok', Pendiente: 'wait', Cancelando: 'wait', Cancelada: 'off', Rechazada: 'off' };
+function reservationCard(r, cancellable) {
+  return `<article class="reservation-item"><div class="reservation-head"><h4>${escapeHTML(r.hotel)}</h4><span class="status-pill status-${statusTone[r.status] || 'wait'}">${escapeHTML(r.status)}</span></div><p>${escapeHTML(r.room)}<br>${dateText(r.checkin)} – ${dateText(r.checkout)} · ${r.guests} ${r.guests === 1 ? 'adulto' : 'adultos'}<br><span class="reservation-code">${escapeHTML(r.id)}</span> · ${money(r.total)} COP</p>${cancellable ? `<button class="cancel-button" data-cancel="${escapeHTML(r.id)}">Cancelar reserva</button>` : ''}</article>`;
 }
 function confirmCancel(r) {
   openModal(`<p class="eyebrow">CANCELAR RESERVA</p><h2>¿Cancelar esta reserva?</h2><p><strong>${escapeHTML(r.hotel)}</strong><br>${escapeHTML(r.room)}<br>${dateText(r.checkin)} – ${dateText(r.checkout)}<br>${escapeHTML(r.id)} · ${money(r.total)} COP</p><p class="modal-hint">La habitación quedará libre para otros huéspedes. Esta acción no se puede deshacer.</p><p class="form-error" id="form-error" role="alert"></p><div class="modal-actions"><button class="button secondary" id="keep-reservation">Volver</button><button class="button danger" id="confirm-cancel">Sí, cancelar</button></div>`);
@@ -180,13 +203,26 @@ function confirmCancel(r) {
     await showReservations(); toast(result.status === 'Cancelando' ? 'Cancelación en proceso. Actualiza tus reservas para consultar el resultado.' : 'Reserva cancelada. Estamos preparando el aviso para tu correo.', result.status === 'Cancelando' ? 'info' : 'success');
   }));
 }
+const sentText = (seconds) => new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' }).format(new Date(seconds * 1000));
+const mailValue = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? dateText(value) : /^\d+ COP$/.test(value) ? `${money(Number(value.split(' ')[0]))} COP` : value;
+// Texto plano de Notificaciones: párrafos separados por línea en blanco y bloques «Clave: valor».
+function mailBody(text) {
+  return text.split(/\n{2,}/).map((block) => {
+    const lines = block.trim().split('\n');
+    if (block.startsWith('HOTELS ·')) return `<p class="mail-footer">${lines.map(escapeHTML).join('<br>')}</p>`;
+    const pairs = lines.map((line) => line.match(/^([^:]{1,24}): (.+)$/));
+    if (lines.length > 1 && pairs.every(Boolean)) return `<dl class="mail-details">${pairs.map(([, key, value]) => `<div><dt>${escapeHTML(key)}</dt><dd>${escapeHTML(mailValue(value))}</dd></div>`).join('')}</dl>`;
+    return `<p>${lines.map(escapeHTML).join('<br>')}</p>`;
+  }).join('');
+}
 async function showNotifications() {
   if (!state.user) return showAuth();
   openModal('<h2>Notificaciones</h2><p>Consultando el correo de tu cuenta…</p>');
   try {
     const data = await api('/notifications');
     const status = {vista_previa:'Disponible en Hotels',pendiente:'En cola',reintentando:'Reintentando entrega',error:'No se pudo entregar',aceptado_smtp:'Aceptado por el proveedor de correo'};
-    openModal(`<p class="eyebrow">EL CORREO DE TUS RESERVAS</p><h2>Notificaciones</h2><p>${data.smtpConfigured ? 'Consulta los avisos enviados a tu correo. Si no ves un mensaje, revisa también la carpeta de spam. La aceptación del proveedor no confirma la entrega en tu bandeja.' : 'El envío por correo no está disponible en este momento. Puedes consultar tus avisos aquí.'}</p><button class="button secondary" id="refresh-notifications">Actualizar mensajes</button>${data.notifications.length ? data.notifications.map((n) => `<article class="notification-item"><h3>${escapeHTML(n.subject)}</h3><p>Para: ${escapeHTML(n.recipient)}</p><span class="mail-status">${status[n.status] || 'En proceso'}</span><pre>${escapeHTML(n.body)}</pre></article>`).join('') : '<div class="reservation-item"><p>Los mensajes nuevos pueden tardar unos segundos en aparecer. Pulsa «Actualizar mensajes» para consultarlos.</p></div>'}`);
+    const tone = {error: 'is-error', aceptado_smtp: 'is-ok'};
+    openModal(`<p class="eyebrow">EL CORREO DE TUS RESERVAS</p><h2>Notificaciones</h2><p>${data.smtpConfigured ? 'Consulta los avisos enviados a tu correo. Si no ves un mensaje, revisa también la carpeta de spam. La aceptación del proveedor no confirma la entrega en tu bandeja.' : 'El envío por correo no está disponible en este momento. Puedes consultar tus avisos aquí.'}</p><button class="button secondary" id="refresh-notifications">Actualizar mensajes</button>${data.notifications.length ? data.notifications.map((n) => `<article class="notification-item mail-card"><header><div><h3>${escapeHTML(n.subject)}</h3><p class="mail-meta">Para: ${escapeHTML(n.recipient)} · ${sentText(n.created)}</p></div><span class="mail-status ${tone[n.status] || ''}">${status[n.status] || 'En proceso'}</span></header><div class="mail-body">${mailBody(n.body)}</div></article>`).join('') : '<div class="reservation-item"><p>Los mensajes nuevos pueden tardar unos segundos en aparecer. Pulsa «Actualizar mensajes» para consultarlos.</p></div>'}`);
     $('#refresh-notifications').addEventListener('click', showNotifications);
   } catch (error) { openModal(`<h2>Notificaciones</h2><p>${escapeHTML(error.message)}</p>`); }
 }
@@ -197,6 +233,7 @@ $('#hotel-list').addEventListener('change', (event) => {
 });
 $('.filters').addEventListener('click', (event) => { const button = event.target.closest('[data-filter]'); if (!button) return; state.filter = button.dataset.filter; document.querySelectorAll('[data-filter]').forEach((b) => { b.classList.toggle('active',b === button); b.setAttribute('aria-pressed',String(b === button)); }); render(); });
 $('#sort').addEventListener('change', (event) => { state.sort = event.target.value; render(); });
+$('#max-price').addEventListener('change', (event) => { state.maxPrice = Number(event.target.value); render(); });
 $('#search-form').addEventListener('submit', async (event) => {
   event.preventDefault(); const a = $('#checkin').value, b = $('#checkout').value;
   const length = (Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000;

@@ -109,12 +109,22 @@
           <h2 id="results-title">Encuentra tu próxima estancia</h2>
           <p id="result-description">Cargando alojamientos…</p>
         </div>
-        <label class="sort">Ordenar por
-          <select id="sort" aria-label="Ordenar hoteles">
-            <option value="recommended">Recomendados</option>
-            <option value="price">Menor precio</option>
-          </select>
-        </label>
+        <div class="result-controls">
+          <label class="sort">Precio por noche
+            <select id="max-price" aria-label="Precio máximo por noche">
+              <option value="0">Cualquiera</option>
+              <option value="280000">Hasta $280.000</option>
+              <option value="300000">Hasta $300.000</option>
+              <option value="330000">Hasta $330.000</option>
+            </select>
+          </label>
+          <label class="sort">Ordenar por
+            <select id="sort" aria-label="Ordenar hoteles">
+              <option value="recommended">Recomendados</option>
+              <option value="price">Menor precio</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div class="explore-layout">

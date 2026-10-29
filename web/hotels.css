@@ -459,13 +459,6 @@ dialog {
   line-height: 1.5;
 }
 
-.notification-item pre {
-  white-space: pre-wrap;
-  font: 11px/1.7 'DM Sans', Arial, sans-serif;
-  color: #63736a;
-  margin: 10px 0;
-}
-
 .mail-status {
   font-size: 9px;
   display: inline-block;
@@ -1173,4 +1166,185 @@ footer {
 
 .hero-art > img {
   animation: hotels-fade 1s ease both;
+}
+
+/* Filtro de precio, cuenta, reservas agrupadas y vista de correos. */
+.result-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 22px;
+}
+
+.account-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.account-stats > div {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.account-stats strong {
+  display: block;
+  font-family: 'Manrope', Arial, sans-serif;
+  font-size: 24px;
+  letter-spacing: -.5px;
+}
+
+.account-stats span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.logout-button {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+.logout-button:hover {
+  color: var(--ink);
+  background: #fff;
+}
+
+.reservation-group {
+  margin-top: 22px;
+}
+
+.group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.group-title span {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--green);
+  color: var(--ink);
+  letter-spacing: 0;
+}
+
+.reservation-group .reservation-item {
+  margin-top: 10px;
+  padding: 14px 0 4px;
+}
+
+.reservation-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reservation-item h4 {
+  margin: 0 0 7px;
+  font-family: 'Manrope', Arial, sans-serif;
+  font-size: 16px;
+}
+
+.reservation-code {
+  letter-spacing: .5px;
+}
+
+.status-pill {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-ok,
+.mail-status.is-ok {
+  background: #e3efe6;
+  color: #24613f;
+}
+
+.status-wait {
+  background: #f6ecd9;
+  color: #8a5a1c;
+}
+
+.status-off,
+.mail-status.is-error {
+  background: #f1e4e1;
+  color: #8c3524;
+}
+
+.mail-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mail-card .mail-status {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+dialog .mail-meta {
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.mail-body {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+dialog .mail-body p {
+  color: var(--ink);
+  line-height: 1.7;
+}
+
+.mail-details {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0;
+  font-size: 12px;
+}
+
+.mail-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 7px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.mail-details dt {
+  color: var(--muted);
+}
+
+.mail-details dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+dialog .mail-body .mail-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--muted);
 }
