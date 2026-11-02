@@ -1,10 +1,22 @@
 # Hotels — contexto completo del proyecto
 
-Actualizado el **29 de octubre de 2026**. Este es el documento central de contexto, funcionamiento, herramientas, decisiones, verificación e historial de Hotels. Reúne la información antes distribuida en `HISTORIAL_PROYECTO.md`, `DECISIONES_TECNICAS.md`, `PRUEBAS.md`, `SUPABASE.md` y `FUENTES.md`.
+Actualizado el **2 de noviembre de 2026**. Este es el documento central de contexto, funcionamiento, herramientas, decisiones, verificación e historial de Hotels. Reúne la información antes distribuida en `HISTORIAL_PROYECTO.md`, `DECISIONES_TECNICAS.md`, `PRUEBAS.md`, `SUPABASE.md` y `FUENTES.md`.
 
 Los resultados de ejecución que se citan conservan sus fechas. Tener código escrito, un proveedor configurado o un commit publicado no significa haber completado un despliegue público ni todos los entregables.
 
 **Estado más reciente:** se autorizó y preparó la publicación en Vercel y Render; todavía faltan la conexión de esas cuentas, la autorización Gmail API y la creación/verificación de los recursos públicos. Véase la sección 19. Las notas anteriores de despliegue diferido reflejan las decisiones vigentes en sus respectivas etapas.
+
+### Verificación integral — 2 de noviembre de 2026
+
+El usuario pidió revisar microservicios y frontend tras mencionar cambios de su compañero en el mismo repositorio. Se consultaron GitHub, ramas, commits y pull requests y se actualizó la referencia remota. El código disponible seguía en `e61c51b`, sin cambios locales, commits nuevos ni pull requests abiertos; había nueve pull requests cerrados. Esta revisión corresponde a esa versión y no acredita cambios adicionales que todavía no aparezcan publicados.
+
+Aprobaron **121 comprobaciones HTTP con SQLite temporal y 104 con las seis bases PostgreSQL reales**, más 11 pruebas de configuración, 9 de migración, 4 de OpenAPI, 5 de seguridad de correo y 12 de nube/Gmail. ESLint y la prueba del artefacto frontend también aprobaron. Se verificaron registro/sesión, bloqueo y recuperación, permisos, aislamiento entre usuarios, reservas/cancelaciones, concurrencia sin sobreventa, recuperación de fallos y eventos de Notificaciones. Los envíos reales estuvieron desactivados en las suites. Una conexión independiente a Gmail aprobó TLS y autenticación SMTP sin enviar mensajes nuevos; no se afirma una nueva recepción en bandeja. Docker no se volvió a ejecutar localmente porque sus ejecutables siguen sin estar disponibles.
+
+Antes de las pruebas remotas se respaldaron de forma privada todas las tablas de los seis servicios en `data/backups/verification-20261102T.../`. Se comprobaron sus propietarios y RLS y se comparó el contenido completo después de la limpieza: todos los datos originales quedaron iguales, sin cuentas, reservas ni tokens de prueba persistentes. Se mantienen dos usuarios/dos huéspedes, seis mensajes, tres hoteles, seis tipos de habitación, dos reservas y seis inventarios/una asignación.
+
+En navegador se utilizó 8081 con seis SQLite efímeras y una cuenta QA exclusiva: autenticación, catálogo, disponibilidad, reserva confirmada, aviso en la bandeja, panel con hoteles/habitaciones/huéspedes y Swagger funcionaron sin errores de consola. Las fotos cargaron, incluida la imagen diferida del tercer hotel. La evidencia está en `rev/work/hotels-verificacion-20261102-reserva.png`. Se cerró la sesión QA y se detuvieron sus siete procesos. La revisión automática bloqueó eliminar su carpeta temporal; se conservaron esas bases de prueba como respaldo privado en `data/backups/ui-verification-20261102/`, ignorado por Git, y no quedaron servicios de QA activos.
+
+Se inició la aplicación normal en **8080**, se verificaron los siete health HTTP 200, seis servicios declarando PostgreSQL y `ready=true` del Gateway. Se dejó abierta la página normal conectada a Supabase. El puerto 8081 era una vista temporal sin servidor al comenzar. No se modificó código funcional ni esquemas; solo se documentó esta comprobación.
 
 ### Recuperación de contraseña y bloqueo por correo — 29 de octubre de 2026
 
