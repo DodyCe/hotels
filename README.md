@@ -2,6 +2,8 @@
 
 Sistema de reservas hoteleras del proyecto 6, con frontend HTML/CSS/JavaScript, API Gateway y seis microservicios Python con bases PostgreSQL independientes.
 
+Aplicación pública: [Hotels](https://hotels-monteria-dodyce.vercel.app/) · [Swagger](https://hotels-monteria-dodyce.vercel.app/docs.html) · [Estado](https://hotels-monteria-dodyce.vercel.app/status.html). El alcance de la verificación y los límites gratuitos/OAuth están en [README_CONTEXT.md](README_CONTEXT.md).
+
 ## Inicio rápido
 
 En Windows, ejecuta `INICIAR.cmd` y abre <http://127.0.0.1:8080/>. Mantén la consola abierta.
