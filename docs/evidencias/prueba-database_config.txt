@@ -1,0 +1,11 @@
+# Comando: python tests/database_config.py
+# Fecha: 2026-11-02 21:22 (hora de Colombia)
+# Entorno: Python 3.12.10, Windows 11, bases SQLite temporales, envío de correo desactivado
+
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.009s
+
+OK
+
+# Código de salida: 0

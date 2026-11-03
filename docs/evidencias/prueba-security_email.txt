@@ -1,0 +1,12 @@
+# Comando: python tests/security_email.py
+# Fecha: 2026-11-02 21:22 (hora de Colombia)
+# Entorno: Python 3.12.10, Windows 11, bases SQLite temporales, envío de correo desactivado
+
+..2026-11-02 21:22:38,127 WARNING Entrega de correo fallida; revisar configuración del proveedor (evento password-reset:fixture)
+...
+----------------------------------------------------------------------
+Ran 5 tests in 0.295s
+
+OK
+
+# Código de salida: 0

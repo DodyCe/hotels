@@ -1,0 +1,18 @@
+# Comando: python tests/cloud_deployment.py
+# Fecha: 2026-11-02 21:22 (hora de Colombia)
+# Entorno: Python 3.12.10, Windows 11, bases SQLite temporales, envío de correo desactivado
+
+..127.0.0.1 - - [02/Nov/2026 21:22:39] "GET /api/auth/me HTTP/1.1" 403 -
+127.0.0.1 - - [02/Nov/2026 21:22:39] "GET /api/readiness HTTP/1.1" 403 -
+127.0.0.1 - - [02/Nov/2026 21:22:39] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [02/Nov/2026 21:22:39] "GET / HTTP/1.1" 404 -
+.127.0.0.1 - - [02/Nov/2026 21:22:39] "GET /api/readiness HTTP/1.1" 200 -
+.127.0.0.1 - - [02/Nov/2026 21:22:39] "POST /api/auth/login HTTP/1.1" 403 -
+.127.0.0.1 - - [02/Nov/2026 21:22:39] "GET /api/auth/me HTTP/1.1" 200 -
+.......
+----------------------------------------------------------------------
+Ran 12 tests in 0.794s
+
+OK
+
+# Código de salida: 0
