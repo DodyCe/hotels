@@ -4,11 +4,13 @@ Sigue las diez etapas de la sección 6 de la guía. Sirve como base para las dia
 
 ## Antes de empezar
 
-- Iniciar Hotels 10 minutos antes con las bases Supabase y abrir `/status.html`: los seis servicios en **Activo**.
-- Tener abiertas estas pestañas: la aplicación, `/status.html`, `/docs.html`, `/admin.html`, el repositorio en GitHub (pestaña Actions) y el panel de Supabase.
+- La demostración se hace en la aplicación publicada: https://hotels-monteria-dodyce.vercel.app/
+- 10 minutos antes, despertar los servicios de Render abriendo el `/health` de cada uno (lista en la parte E del manual). El Gateway no los despierta por sí solo. Luego abrir `/status.html` y esperar a ver los seis en **Activo**. Mantener la aplicación en uso para que no se vuelvan a dormir.
+- Tener abiertas estas pestañas: la aplicación, `/status.html`, `/docs.html`, `/admin.html`, el repositorio en GitHub (pestaña Actions), el panel de Render y el panel de Supabase.
+- Confirmar el día anterior que el permiso de Gmail no venció (en modo Prueba dura siete días): pedir una recuperación de contraseña y ver que llegue el correo.
 - Tener una cuenta administradora ya creada y una cuenta de huésped por crear en vivo, con un correo que se pueda abrir.
-- Tener una terminal con Docker (`docker compose ps`) si se va a mostrar en vivo.
-- **Plan B:** si falla internet o Supabase, vaciar las URL de base en `.env` y reiniciar. La aplicación funciona con SQLite local. Si falla la interfaz, ejecutar `python tools/demo_flujo.py`, que recorre el mismo flujo por la API.
+- Si se va a mostrar Docker en vivo, usar un `.env` sin URLs de base, para que los contenedores usen SQLite y no compartan las bases con la versión publicada.
+- **Plan B:** si falla internet o la versión publicada, iniciar Hotels en local con `INICIAR.cmd` y las URLs de base vacías en `.env`. Funciona completo con SQLite. Si falla la interfaz, ejecutar `python tools/demo_flujo.py` contra la copia local, que recorre el mismo flujo por la API. No iniciar la copia local con las bases de Supabase mientras la publicada esté activa.
 
 ## 1. Problema (1 minuto)
 
@@ -76,7 +78,7 @@ Ver [05-seguridad.md](05-seguridad.md). En vivo:
 
 - Mostrar `Dockerfile` y `compose.yaml`: siete contenedores, un solo Dockerfile, solo el Gateway publica puerto, cada contenedor con su `healthcheck`.
 - Mostrar `docker compose ps` con los contenedores en `healthy`, o el trabajo **Docker Compose** en verde en GitHub Actions.
-- Mencionar `render.yaml` y `vercel.ts`: la misma imagen está preparada para desplegarse por servicio.
+- Mostrar el panel de Render: la misma imagen corre como siete servicios separados, cada uno con su URL, su `/health` y sus logs. El frontend está en Vercel (`vercel.ts`).
 
 ## 9. Pruebas (2 minutos)
 
@@ -122,5 +124,6 @@ Flujo completo que atraviesa los seis servicios:
 | ¿Cómo se comunican si no comparten base? | Por API. Reservas guarda copia del nombre y el total para conservar el historial |
 | ¿Quién puede cambiar hoteles y precios? | Solo una cuenta con rol admin. El rol se revisa en Auth en cada operación |
 | ¿Cómo se crea un administrador? | Un operador ejecuta `tools/set_admin.py`. El registro público no acepta roles |
-| ¿Está publicado en internet? | La configuración de Vercel y Render está lista; falta conectar las cuentas |
+| ¿Está publicado en internet? | Sí, en https://hotels-monteria-dodyce.vercel.app/, con Vercel para el frontend y siete servicios en Render |
+| ¿Por qué tarda la primera carga? | Plan gratuito de Render: los servicios se duermen sin uso y tardan cerca de un minuto en despertar |
 | ¿Dónde están los pagos? | No se implementaron; no son necesarios para el flujo pedido |

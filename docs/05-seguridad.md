@@ -72,4 +72,4 @@ Además hay límites por IP: 12 intentos de acceso por minuto, 3 solicitudes de 
 - Confirmar la titularidad del correo al registrarse (el correo de bienvenida no lo verifica).
 - Autenticación en dos pasos.
 - JWT si se separan los servicios en redes distintas.
-- Verificar HTTPS y cookies `Secure` en el despliegue público.
+- Publicar la app OAuth de Google para que el permiso de Gmail no venza cada siete días.

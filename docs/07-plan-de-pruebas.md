@@ -165,4 +165,4 @@ Las evidencias de esta carpeta se tomaron con bases SQLite locales y el correo d
 
 - Pruebas de carga.
 - Pruebas automáticas de interfaz en navegador (se revisó manualmente en escritorio y móvil).
-- Despliegue público en Vercel y Render.
+- Pruebas autenticadas en la aplicación publicada (reserva, cancelación y administración). En producción se comprobaron los siete `/health`, `/api/readiness`, catálogo, habitaciones, rechazo 401 sin sesión, OpenAPI, Swagger, página de estado, rechazo 403 de las URLs directas sin clave y el envío del correo de recuperación por Gmail API (2 nov 2026).
