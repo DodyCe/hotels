@@ -1,0 +1,47 @@
+# Logs de los procesos durante tools/demo_flujo.py (salida de start.py)
+# Líneas con fecha: microservicios (servicio, método, ruta, código).
+# Líneas con 127.0.0.1: Gateway (acceso HTTP).
+# Se omiten las consultas /health que hace el Gateway para /api/readiness.
+
+127.0.0.1 - - [02/Nov/2026 21:23:42] "GET /api/readiness HTTP/1.1" 200 -
+2026-11-02 21:23:43,010 INFO autenticacion POST /auth/register 201
+127.0.0.1 - - [02/Nov/2026 21:23:43] "POST /api/auth/register HTTP/1.1" 201 -
+2026-11-02 21:23:43,039 INFO catalogo-hoteles GET /hotels 200
+127.0.0.1 - - [02/Nov/2026 21:23:43] "GET /api/hotels HTTP/1.1" 200 -
+2026-11-02 21:23:43,067 INFO habitaciones GET /rooms 200
+127.0.0.1 - - [02/Nov/2026 21:23:43] "GET /api/rooms?hotelId=ghl-monteria&guests=2 HTTP/1.1" 200 -
+2026-11-02 21:23:43,085 INFO disponibilidad-inventario GET /availability 200
+127.0.0.1 - - [02/Nov/2026 21:23:43] "GET /api/availability?checkin=2026-12-02&checkout=2026-12-05 HTTP/1.1" 200 -
+2026-11-02 21:23:43,128 INFO autenticacion GET /internal/users/b93e64f9-4105-4d66-9f45-bce611149073 200
+2026-11-02 21:23:43,162 INFO autenticacion GET /auth/me 200
+2026-11-02 21:23:43,165 INFO habitaciones GET /rooms/ghl-monteria-principal 200
+2026-11-02 21:23:43,174 INFO notificaciones POST /internal/events 202
+2026-11-02 21:23:43,188 INFO catalogo-hoteles GET /hotels/ghl-monteria 200
+2026-11-02 21:23:43,221 INFO disponibilidad-inventario POST /internal/allocate 201
+2026-11-02 21:23:43,240 INFO reservas POST /reservations 201
+127.0.0.1 - - [02/Nov/2026 21:23:43] "POST /api/reservations HTTP/1.1" 201 -
+2026-11-02 21:23:43,268 INFO disponibilidad-inventario GET /availability 200
+127.0.0.1 - - [02/Nov/2026 21:23:43] "GET /api/availability?checkin=2026-12-02&checkout=2026-12-05 HTTP/1.1" 200 -
+2026-11-02 21:23:44,089 INFO autenticacion GET /internal/users/b93e64f9-4105-4d66-9f45-bce611149073 200
+2026-11-02 21:23:44,105 INFO notificaciones POST /internal/events 202
+2026-11-02 21:23:45,298 INFO autenticacion GET /auth/me 200
+2026-11-02 21:23:45,301 INFO notificaciones GET /notifications 200
+127.0.0.1 - - [02/Nov/2026 21:23:45] "GET /api/notifications HTTP/1.1" 200 -
+2026-11-02 21:23:45,330 INFO autenticacion GET /auth/me 200
+2026-11-02 21:23:45,370 INFO disponibilidad-inventario POST /internal/release 200
+2026-11-02 21:23:45,390 INFO reservas POST /reservations/HT-A406A9FF05/cancel 200
+127.0.0.1 - - [02/Nov/2026 21:23:45] "POST /api/reservations/HT-A406A9FF05/cancel HTTP/1.1" 200 -
+2026-11-02 21:23:45,409 INFO disponibilidad-inventario GET /availability 200
+127.0.0.1 - - [02/Nov/2026 21:23:45] "GET /api/availability?checkin=2026-12-02&checkout=2026-12-05 HTTP/1.1" 200 -
+2026-11-02 21:23:46,139 INFO autenticacion GET /internal/users/b93e64f9-4105-4d66-9f45-bce611149073 200
+2026-11-02 21:23:46,154 INFO notificaciones POST /internal/events 202
+127.0.0.1 - - [02/Nov/2026 21:23:46] code 404, message File not found
+127.0.0.1 - - [02/Nov/2026 21:23:46] "GET /status HTTP/1.1" 404 -
+2026-11-02 21:23:47,415 INFO autenticacion GET /auth/me 200
+2026-11-02 21:23:47,418 INFO notificaciones GET /notifications 200
+127.0.0.1 - - [02/Nov/2026 21:23:47] "GET /api/notifications HTTP/1.1" 200 -
+2026-11-02 21:23:47,471 INFO autenticacion POST /auth/logout 200
+127.0.0.1 - - [02/Nov/2026 21:23:47] "POST /api/auth/logout HTTP/1.1" 200 -
+2026-11-02 21:23:47,511 INFO autenticacion GET /auth/me 401
+2026-11-02 21:23:47,511 INFO reservas GET /reservations 401
+127.0.0.1 - - [02/Nov/2026 21:23:47] "GET /api/reservations HTTP/1.1" 401 -

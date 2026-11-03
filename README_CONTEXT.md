@@ -199,7 +199,7 @@ flowchart LR
   N -->|SMTP con TLS| M[Proveedor de correo]
 ```
 
-Este esquema ayuda a explicar el sistema. Los diagramas formales de arquitectura y de comunicación solicitados por la guía todavía deben prepararse y revisarse como entregables.
+Este esquema ayuda a explicar el sistema. Los diagramas formales de arquitectura y de comunicación están en `docs/01-arquitectura.md`.
 
 ## 5. Microservicios y propiedad de los datos
 
@@ -513,6 +513,8 @@ En la evaluación del **17 de octubre**, Render gratuito no era compatible con e
   - **Documentación:** especificación OpenAPI en `docs/openapi.yaml`.
   - **Calidad:** integración continua en GitHub Actions, ruff, pre-commit, ESLint, `.editorconfig` y `requirements-dev.txt`. Ruff detectó un import sin uso en Notificaciones, que se eliminó.
 
+- **2 de noviembre:** entregables formales en `docs/` (00 a 09), evidencias en `docs/evidencias/`, página `/status.html` sobre `/api/readiness`, nombre del servicio en cada línea de log y `tools/demo_flujo.py` para recorrer el flujo completo por la API. No cambia contratos, esquemas ni configuración de Supabase.
+
 Commits publicados y comprobados el 17 de octubre en `main`:
 
 - `6af1ac1`: agregar Hotels con seis microservicios y pruebas de integración.
@@ -526,16 +528,13 @@ Los commits conservan el historial real, incluidas versiones anteriores de la do
 
 La sección final de entregables pide: código fuente; repositorio e historial Git; README; Docker Compose; Swagger/OpenAPI; diagrama general de arquitectura; diagrama de comunicación; modelo de datos por servicio; decisiones técnicas; plan y evidencias de pruebas; manual breve de instalación/uso; presentación; y demostración funcional.
 
-Este documento reúne contexto y material útil para varios de ellos; **no completa automáticamente la entrega formal**. Falta:
+Los entregables formales están en `docs/`, con el índice en `README.md` y la relación con la guía en `docs/00-requisitos-y-entregables.md`. Se prepararon el 2 de noviembre: diagramas, modelo de datos por servicio, decisiones, seguridad, logs y monitoreo, plan y evidencias de pruebas, manual y guion de sustentación. Este documento sigue siendo el contexto e historial completo. Falta:
 
-1. Preparar la evidencia final del frontend: las pruebas de interfaz con servicios reales, la conexión a los seis PostgreSQL y los flujos de integración ya se verificaron el 28 de octubre; falta organizar el material de la demostración formal.
-2. Organizar la evidencia del panel administrativo ya implementado: altas, consultas, ediciones, retiros lógicos y reactivación de hoteles, habitaciones y huéspedes, además del ajuste de inventario.
-3. Elaborar los modelos de datos formales por servicio. La especificación OpenAPI ya está en `docs/openapi.yaml`.
-4. Preparar los dos diagramas solicitados y el documento final con decisiones, seguridad y comunicación asíncrona justificadas.
-5. Incorporar la ejecución Docker Compose ya aprobada en CI a las evidencias y al manual de instalación.
-6. Capturar evidencias actuales y correo recibido, completar manual, presentación y demostración integral.
-7. La recuperación ya está implementada. La confirmación de correo en el registro y una posible migración a JWT quedan como evolución posterior, no como funciones ya terminadas.
-8. Completar la conexión de cuentas y verificar el despliegue público del frontend en Vercel y de los siete servicios en Render, según la preparación de la sección 19. La migración de las seis bases a Supabase ya está completada.
+1. Completar los integrantes y sus roles en `docs/00-requisitos-y-entregables.md`.
+2. Preparar las diapositivas a partir de `docs/09-guion-sustentacion.md` y ensayar la demostración con las bases reales.
+3. Añadir a `docs/evidencias/` la captura del correo recibido, capturas con Supabase y la salida de `tests/integration.py --six-postgres`. Las evidencias actuales se tomaron con SQLite local y sin envío de correo.
+4. La confirmación de correo en el registro y una posible migración a JWT quedan como evolución posterior, no como funciones ya terminadas.
+5. Completar la conexión de cuentas y verificar el despliegue público del frontend en Vercel y de los siete servicios en Render, según la preparación de la sección 19.
 
 Los pagos aparecen como una posibilidad del sistema, no como un servicio adicional ya implementado. Tener seis microservicios supera el mínimo numérico, pero no garantiza la calificación de todos los criterios.
 

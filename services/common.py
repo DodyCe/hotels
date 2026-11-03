@@ -152,7 +152,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.respond(200, {'status': 'ok', 'service': self.service_name})
     def log_message(self, fmt, *args):
         # No registrar cuerpos, cookies, contraseñas o direcciones de correo.
-        logging.info('%s %s %s', self.command, self.path.split('?')[0], args[1] if len(args) > 1 else '')
+        logging.info('%s %s %s %s', self.service_name, self.command, self.path.split('?')[0], args[1] if len(args) > 1 else '')
 
     def body(self):
         if self.headers.get_content_type() != 'application/json':

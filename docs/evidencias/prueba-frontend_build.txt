@@ -1,0 +1,6 @@
+# Comando: node tests/frontend_build.mjs
+# Fecha: 2026-11-02 21:22 (hora de Colombia)
+
+Frontend: artefacto aislado, Swagger, secreto privado y despliegues independientes verificados.
+
+# Código de salida: 0

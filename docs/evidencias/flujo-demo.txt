@@ -1,0 +1,59 @@
+# Comando: python tools/demo_flujo.py
+# Fecha: 2026-11-02 21:23 (hora de Colombia)
+# Entorno: Hotels iniciado con start.py en Windows 11, seis bases SQLite locales, envío de correo desactivado
+
+1. Estado de los microservicios
+   GET /api/readiness -> HTTP 200
+   - auth: activo
+   - notifications: activo
+   - reservations: activo
+   - catalog: activo
+   - rooms: activo
+   - availability: activo
+
+2. Registro e inicio de sesión (Auth)
+   POST /api/auth/register -> HTTP 201
+   Usuario b93e64f9-4105-4d66-9f45-bce611149073 con cookie de sesión HttpOnly
+
+3. Consultar hoteles (Catálogo)
+   GET /api/hotels -> HTTP 200
+   GHL Hotel Montería, Sites Montería, Hotel Florida Sinú
+
+4. Consultar habitaciones para 2 huéspedes (Habitaciones)
+   GET /api/rooms?hotelId=ghl-monteria&guests=2 -> HTTP 200
+   ghl-monteria-principal: Business Superior, 350000 COP por noche
+
+5. Consultar disponibilidad 2026-12-02 a 2026-12-05 (Inventario)
+   GET /api/availability?checkin=2026-12-02&checkout=2026-12-05 -> HTTP 200
+   Unidades libres de ghl-monteria-principal: 1
+
+6. Crear la reserva (Reservas -> Habitaciones, Catálogo, Inventario)
+   POST /api/reservations -> HTTP 201
+   HT-A406A9FF05: Confirmada, total 1050000 COP calculado por el servidor
+
+7. Inventario actualizado
+   GET /api/availability?checkin=2026-12-02&checkout=2026-12-05 -> HTTP 200
+   Unidades libres de ghl-monteria-principal: 1 -> 0
+
+8. Avisos generados (Notificaciones, vía outbox)
+   GET /api/notifications -> HTTP 200
+   - Confirmación de reserva HT-A406A9FF05 [vista_previa]
+   - Bienvenido a Hotels [vista_previa]
+
+9. Cancelar la reserva
+   POST /api/reservations/HT-A406A9FF05/cancel -> HTTP 200
+   Estado: Cancelada
+
+10. Inventario liberado
+   GET /api/availability?checkin=2026-12-02&checkout=2026-12-05 -> HTTP 200
+   Unidades libres de ghl-monteria-principal: 1
+
+11. Aviso de cancelación
+   GET /api/notifications -> HTTP 200
+   - Cancelación de reserva HT-A406A9FF05 [vista_previa]
+   - Confirmación de reserva HT-A406A9FF05 [vista_previa]
+   - Bienvenido a Hotels [vista_previa]
+
+12. Cerrar sesión
+   POST /api/auth/logout -> HTTP 200
+   Consultar reservas sin sesión -> HTTP 401

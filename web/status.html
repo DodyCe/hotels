@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hotels · Estado de los servicios</title>
+  <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="stylesheet" href="status.css">
+  <script src="status.js" defer></script>
+</head>
+<body>
+  <main>
+    <h1>Estado de los servicios</h1>
+    <p>Consulta <code>/api/readiness</code> cada 5 segundos. El Gateway pregunta el <code>/health</code> de cada microservicio.</p>
+    <p id="summary" role="status">Consultando…</p>
+    <table>
+      <thead>
+        <tr><th>Microservicio</th><th>Puerto local</th><th>Estado</th></tr>
+      </thead>
+      <tbody id="services"></tbody>
+    </table>
+    <p><a href="/">Volver a la aplicación</a> · <a href="docs.html">Documentación de la API</a></p>
+  </main>
+</body>
+</html>

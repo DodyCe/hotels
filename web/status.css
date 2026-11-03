@@ -1,0 +1,39 @@
+body {
+  margin: 0;
+  background: #fafbf8;
+  color: #173f3b;
+  font-family: Arial, sans-serif;
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 16px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+th,
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e7e0;
+  text-align: left;
+}
+
+.ok {
+  color: #1f7a4d;
+  font-weight: 700;
+}
+
+.fail {
+  color: #b3261e;
+  font-weight: 700;
+}
+
+a {
+  color: #173f3b;
+}
