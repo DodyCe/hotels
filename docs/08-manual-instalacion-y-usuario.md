@@ -40,6 +40,8 @@ No reemplaces un `.env` que ya exista. Las variables principales:
 
 Sin ninguna variable, la aplicación funciona completa en local con SQLite y sin envío de correo. Es la forma más rápida de probarla.
 
+**Importante:** la versión publicada usa las seis bases de Supabase. No inicies una copia local con esas mismas URLs mientras la publicada esté activa: los hilos de fondo de las dos copias procesarían las mismas colas de eventos y correos. Para pruebas locales deja las URLs de base vacías.
+
 **Nunca subas `.env` a GitHub.** Ya está en `.gitignore`.
 
 ### Paso 3, opción 1. Iniciar en Windows
@@ -79,6 +81,8 @@ Solo el Gateway publica el puerto 8080. Los servicios se hablan por la red inter
 | <http://127.0.0.1:8080/status.html> | Seis servicios en **Activo** |
 | <http://127.0.0.1:8080/docs.html> | Swagger UI con la API pública e interna |
 | <http://127.0.0.1:8080/admin.html> | Panel de administración (requiere rol admin) |
+
+En la versión publicada las mismas páginas están en https://hotels-monteria-dodyce.vercel.app/.
 
 Desde otra terminal se puede correr el flujo completo automático:
 
@@ -182,9 +186,22 @@ Entra a **Administración** (o `/admin.html`). Tiene tres pestañas: **Hoteles**
 
 Los contratos están en [openapi.yaml](openapi.yaml) e [internal-openapi.yaml](internal-openapi.yaml).
 
-## Parte E. Despliegue en la nube (preparado)
+## Parte E. Aplicación publicada
 
-El repositorio trae la configuración para Vercel (frontend) y Render (Gateway y seis servicios), pero el despliegue público aún no está hecho. Pasos resumidos:
+La aplicación está publicada en https://hotels-monteria-dodyce.vercel.app/ (Swagger en `/docs.html` y estado en `/status.html`). El frontend está en Vercel; el Gateway y los seis microservicios, en siete servicios gratuitos de Render; las bases, en Supabase.
+
+En el plan gratuito los servicios se duermen sin uso, y el Gateway no alcanza a despertarlos por sí solo: mientras duermen, la página muestra errores y `/status.html` los marca **Sin respuesta**. Para despertarlos, abre estas direcciones (cada una puede tardar hasta un minuto en responder):
+
+- https://hotels-auth.onrender.com/health
+- https://hotels-notifications.onrender.com/health
+- https://hotels-reservations-xqt7.onrender.com/health
+- https://hotels-catalog.onrender.com/health
+- https://hotels-rooms.onrender.com/health
+- https://hotels-availability.onrender.com/health
+
+Cuando las seis respondan `"status": "ok"`, `/status.html` muestra los seis en **Activo** y la aplicación funciona. Se vuelven a dormir tras unos 15 minutos sin uso.
+
+Cómo se publicó, por si hay que repetirlo:
 
 1. En Render, crear el Blueprint desde `render.yaml`. Se crean siete servicios y el grupo de variables `hotels-runtime`.
 2. Completar en Render las seis URL de base, `INTERNAL_API_KEY`, `ORIGIN_SECRET`, `PUBLIC_ORIGIN` y las variables de Gmail API (`MAIL_PROVIDER=gmail_api`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`). `tools/authorize_gmail.py` obtiene el token.

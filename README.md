@@ -8,6 +8,8 @@ Aplicación pública: [Hotels](https://hotels-monteria-dodyce.vercel.app/) · [S
 
 En Windows, ejecuta `INICIAR.cmd` y abre <http://127.0.0.1:8080/>. Mantén la consola abierta.
 
+Mientras la versión publicada esté activa, la copia local debe usar SQLite (URLs de base vacías en `.env`), no las mismas bases de Supabase.
+
 Instalación nueva:
 
 ```powershell
@@ -61,6 +63,6 @@ docs/                 Entregables
 
 ## Más contexto
 
-[README_CONTEXT.md](README_CONTEXT.md) conserva el historial completo del proyecto: configuración de Supabase, correo, verificaciones con fecha y decisiones de cada etapa. La configuración preparada para Vercel (`vercel.ts`) y Render (`render.yaml`) se explica en su sección 19; el despliegue público sigue pendiente.
+[README_CONTEXT.md](README_CONTEXT.md) conserva el historial completo del proyecto: configuración de Supabase, correo, verificaciones con fecha y decisiones de cada etapa. La publicación en Vercel (`vercel.ts`) y Render (`render.yaml`) se explica en su sección 19 y en la entrada del 2 de noviembre.
 
 Los hoteles son referencias independientes y las fotos son ilustrativas; los créditos completos están en el contexto y en la interfaz.

@@ -12,7 +12,7 @@
 | Correo | Gmail por SMTP con TLS o Gmail API por HTTPS | Envío desde Notificaciones |
 | Contenedores | Docker (`python:3.12-slim`) y Docker Compose | Siete contenedores, uno por proceso |
 | Calidad | GitHub Actions, pre-commit, ruff, ESLint | CI en cada pull request y en `main` |
-| Nube (preparada) | Vercel para el frontend, Render para los servicios | `vercel.ts`, `render.yaml` |
+| Nube | Vercel para el frontend, Render para el Gateway y los seis servicios (plan gratuito) | `vercel.ts`, `render.yaml`, https://hotels-monteria-dodyce.vercel.app |
 | Versionado | Git y GitHub (`DodyCe/hotels`), una rama por tema y pull requests | Historial del proyecto |
 
 **No se usan:** frameworks web (Flask, FastAPI, Django), ORM, React, RabbitMQ, Kafka, Kubernetes ni pagos. No se deben presentar como parte del proyecto.

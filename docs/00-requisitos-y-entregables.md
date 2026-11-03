@@ -46,6 +46,7 @@ Relación entre lo que pide la guía del proyecto final y dónde se cumple en es
 | Repositorio Git con historial de commits | Este repositorio | Listo |
 | README con instalación y ejecución | [README.md](../README.md) | Listo |
 | docker-compose | [compose.yaml](../compose.yaml) | Listo, verificado en CI |
+| Aplicación publicada (adicional) | https://hotels-monteria-dodyce.vercel.app/ | Publicada en Vercel y Render |
 | Documentación Swagger/OpenAPI | [openapi.yaml](openapi.yaml), [internal-openapi.yaml](internal-openapi.yaml), `/docs.html` | Listo |
 | Diagrama general de arquitectura | [01-arquitectura.md](01-arquitectura.md) | Listo |
 | Diagrama de comunicación entre microservicios | [01-arquitectura.md](01-arquitectura.md) | Listo |
@@ -73,9 +74,10 @@ Lo que no se puede resolver desde el código:
 
 1. Completar los integrantes y el rol de cada uno en este documento.
 2. Hacer las diapositivas a partir de [09-guion-sustentacion.md](09-guion-sustentacion.md), con los diagramas de 01.
-3. Ensayar la demostración con las bases Supabase y el correo configurado.
+3. Ensayar la demostración en la aplicación publicada.
 4. Añadir a `evidencias/` una captura del correo recibido en Gmail y capturas con las bases reales (`/status.html` y el panel de Supabase).
 5. Correr `tests/integration.py --six-postgres` antes de la entrega y guardar la salida en `evidencias/`.
 6. Si hay Docker en algún equipo, correr `docker compose up --build` y guardar una captura de `docker compose ps`.
-7. Decidir si se publica en Vercel y Render (ver la parte E del manual).
-8. Repartir las diez etapas del guion entre los integrantes.
+7. Probar en la aplicación publicada, con una cuenta de prueba, reserva, cancelación y administración. Hasta ahora allí se comprobaron salud, estado, catálogo, permisos y el envío de recuperación.
+8. Resolver la publicación de la app OAuth de Google. En modo Prueba, el permiso de Gmail vence cada siete días y hay que renovarlo para que salgan los correos.
+9. Repartir las diez etapas del guion entre los integrantes.

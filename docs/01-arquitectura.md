@@ -8,7 +8,7 @@ Hotels es un sistema de reservas hoteleras para Montería. Un huésped consulta 
 
 La solución tiene tres capas:
 
-- **Frontend:** HTML, CSS y JavaScript sin framework. En local lo sirve el Gateway; en la nube está preparado para Vercel.
+- **Frontend:** HTML, CSS y JavaScript sin framework. En local lo sirve el Gateway; en la nube lo publica Vercel.
 - **API Gateway:** único punto de entrada de las APIs. Recibe las llamadas `/api/*` y las reenvía al microservicio dueño de cada dominio.
 - **Seis microservicios:** cada uno es un proceso Python independiente, con su propio puerto y su propia base de datos PostgreSQL en un proyecto Supabase distinto.
 
@@ -181,11 +181,11 @@ stateDiagram-v2
 
 ## 1.7 Despliegue
 
-**Local en Windows:** `INICIAR.cmd` ejecuta `start.py`, que inicia los seis servicios, espera su `/health`, ejecuta la reconciliación de Reservas y después abre el Gateway en el puerto 8080.
+**Local en Windows:** `INICIAR.cmd` ejecuta `start.py`, que inicia los seis servicios, espera su `/health`, ejecuta la reconciliación de Reservas y después abre el Gateway en el puerto 8080. Mientras la versión publicada esté activa, la copia local debe usar SQLite (URLs de base vacías): si usara las mismas bases de Supabase, sus hilos de fondo procesarían las mismas colas que Render.
 
 **Docker Compose:** `compose.yaml` define siete contenedores (Gateway y seis servicios) a partir de un solo `Dockerfile`. Solo el Gateway publica un puerto. Cada contenedor recibe solo su conexión de base. GitHub Actions lo construye y prueba en cada cambio (`tests/compose.py`).
 
-**Nube (preparado, sin publicar):**
+**Nube (publicado):** https://hotels-monteria-dodyce.vercel.app/
 
 ```mermaid
 flowchart LR
@@ -196,7 +196,9 @@ flowchart LR
 ```
 
 - `vercel.ts` publica el frontend y reenvía `/api/*` al Gateway con una cabecera secreta. Así las cookies quedan en el dominio del frontend.
-- `render.yaml` declara siete servicios gratuitos, cada uno con su contenedor y su `/health`.
+- `render.yaml` declara siete servicios gratuitos, cada uno con su contenedor y su `/health`. En Render cada microservicio tiene su propia URL y solo acepta llamadas con la clave interna; el Gateway solo acepta llamadas que vienen de Vercel.
+- Los seis servicios se conectan a sus seis bases de Supabase. Cada uno recibe únicamente su propia cadena de conexión.
+- En el plan gratuito, un servicio sin uso se duerme y el Gateway no alcanza a despertarlo dentro de su tiempo de espera: hay que llamar directamente a su `/health` (ver la parte E del manual).
 - En Render, Notificaciones usa Gmail API por HTTPS porque el plan gratuito bloquea los puertos SMTP.
 
 Ver [08-manual-instalacion-y-usuario.md](08-manual-instalacion-y-usuario.md).
