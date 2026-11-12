@@ -116,10 +116,34 @@ function archive(row,restore) {
   select('#archive-form').addEventListener('submit',event=>{event.preventDefault();save(event.target.querySelector('button'),`/${tab}/${encodeURIComponent(row.id)}`,restore?'PATCH':'DELETE',restore?{active:true}:undefined);});
 }
 
-function inventory(row) {
-  const total=data.inventory.find(i=>i.roomId===row.id)?.total ?? 1;
-  showEditor('Unidades de inventario',`<p>${escapeHTML(row.name)}</p><p>No se puede reducir el inventario por debajo de las unidades comprometidas por reservas vigentes.</p><form class="admin-form" id="inventory-form">${input('total','Unidades disponibles en el inventario',total,'number','required min="1" max="1000"')}<p class="form-error" id="editor-error" role="alert"></p><button type="submit" class="button primary">Guardar inventario</button></form>`);
-  select('#inventory-form').addEventListener('submit',event=>{event.preventDefault();save(event.target.querySelector('button'),'/inventory/'+encodeURIComponent(row.id),'PUT',{total:Number(new FormData(event.target).get('total'))});});
+async function inventory(row,button) {
+  const path = '/inventory/'+encodeURIComponent(row.id);
+  button.disabled = true;
+  try {
+    const {inventory: detail} = await request(path);
+    if (!button.isConnected) return;
+    button.disabled = false;
+    showEditor('Unidades de inventario',`<p>${escapeHTML(row.name)}</p><p>No se puede reducir el inventario por debajo de las unidades comprometidas por reservas vigentes.</p><form class="admin-form" id="inventory-form">${input('total','Total de unidades',detail.total,'number','required min="1" max="1000"')}<label>Números físicos<textarea name="roomNumbers" rows="5" spellcheck="false" aria-describedby="room-numbers-help" placeholder="101&#10;102&#10;103-A">${escapeHTML(detail.roomNumbers.join('\n'))}</textarea></label><p id="room-numbers-help" class="modal-hint">Escribe un número por línea. Puedes dejar unidades sin número hasta que las identifiques.</p><p id="room-numbers-count" role="status" class="modal-hint"></p><p class="form-error" id="editor-error" role="alert"></p><button type="submit" class="button primary">Guardar inventario</button></form>`);
+    const form = select('#inventory-form');
+    const enteredNumbers = () => form.elements.roomNumbers.value.split('\n').map(value=>value.trim()).filter(Boolean);
+    const updateCount = () => {
+      const total = form.elements.total.valueAsNumber;
+      const count = enteredNumbers().length;
+      const remaining = total-count;
+      select('#room-numbers-count').textContent = Number.isFinite(total) ?
+        (remaining < 0 ? 'Hay más números que unidades.' : `${count} de ${total} unidades numeradas`) : '';
+    };
+    form.addEventListener('input',updateCount);
+    updateCount();
+    form.addEventListener('submit',event=>{
+      event.preventDefault();
+      save(form.querySelector('button'),path,'PUT',{total:form.elements.total.valueAsNumber,roomNumbers:enteredNumbers()});
+    });
+  } catch(error) {
+    if (button.isConnected) showStatus(error.message);
+  } finally {
+    if (button.isConnected) button.disabled = false;
+  }
 }
 
 document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{
@@ -151,7 +175,7 @@ select('#admin-records').addEventListener('click',event=>{
   }
   const row=data[tab].find(r=>r.id===button.dataset.id);if(!row)return;
   if(button.dataset.action==='edit')edit(row);
-  else if(button.dataset.action==='inventory')inventory(row);
+  else if(button.dataset.action==='inventory')inventory(row,button);
   else archive(row,button.dataset.action==='restore');
 });
 (async()=>{
