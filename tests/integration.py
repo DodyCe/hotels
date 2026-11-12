@@ -165,13 +165,22 @@ def recovery_checks(directory,password):
             rows=db.execute('SELECT body,delivered FROM outbox WHERE id LIKE ?',('password-reset:'+uid+':%',)).fetchall()
             return rows and all(r['delivered'] and r['body']=='{}' for r in rows)
     check(poll(sanitized,timeout=15),'Auth elimina el enlace del outbox después de entregarlo a Notificaciones')
-    new_password='Nueva-Hotels-2026!'
+    new_password='Hotels-Suite25!'
     reset={'token':token,'password':new_password,'confirmPassword':new_password}
+    invalid_passwords=(
+        ('Hotels1!a','entre 10 y 15 caracteres','con menos de 10 caracteres'),
+        ('Hotels-Suite25!x','entre 10 y 15 caracteres','con más de 15 caracteres'),
+        ('HotelsSuite!','un número y un símbolo','sin número'),
+        ('Hotels 2026','un número y un símbolo','sin símbolo aunque contenga espacios'),
+    )
+    for candidate, expected_error, reason in invalid_passwords:
+        code, error, _=request(client(),'/api/auth/reset-password',{**reset,'password':candidate,'confirmPassword':candidate})
+        check(code==400 and expected_error in error['error'], f'La recuperación rechaza una contraseña {reason}')
     check(request(client(),'/api/auth/reset-password',{**reset,'confirmPassword':'Diferente-2026!'})[0]==400,'La recuperación valida ambas contraseñas')
     check(request(client(),'/api/auth/reset-password',{**reset,'token':'x'*43})[0]==400,'Un enlace inventado no permite cambiar contraseñas')
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         codes=list(pool.map(lambda _:request(client(),'/api/auth/reset-password',reset)[0],range(2)))
-    check(sorted(codes)==[200,400], 'Un enlace se consume una sola vez, incluso con dos cambios simultáneos')
+    check(sorted(codes)==[200,400], 'Una contraseña válida de 15 caracteres consume el enlace una sola vez, incluso con dos cambios simultáneos')
     check(request(account,'/api/auth/me')[0]==401 and request(other,'/api/auth/me')[0]==200, 'La recuperación revoca todas las sesiones propias y conserva las ajenas')
     check(request(client(),'/api/auth/login',{'email':email,'password':password})[0]==401 and request(account,'/api/auth/login',{'email':email,'password':new_password})[0]==200,'La nueva contraseña funciona, reemplaza la anterior y desbloquea la cuenta')
     with fixture_db('auth',directory) as db:

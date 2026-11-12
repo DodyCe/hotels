@@ -80,9 +80,9 @@ def main():
                 if not token:time.sleep(.2)
             check(bool(re.fullmatch(r'[A-Za-z0-9_-]{43}',token)),'Auth entrega el enlace privado a Notificaciones en Docker')
             check(not any(n['id'].startswith('password-reset:') for n in request(admin,'/api/notifications')[1]['notifications']),'El correo de recuperación queda fuera de la bandeja web en Docker')
-            new_password=secrets.token_urlsafe(24)
+            new_password='A1!'+secrets.token_hex(4)[:7]
             reset={'token':token,'password':new_password,'confirmPassword':new_password}
-            check(request(admin,'/api/auth/reset-password',reset)[0]==200 and request(admin,'/api/auth/me')[0]==401,'La recuperación cambia la contraseña y revoca la sesión en Docker')
+            check(request(admin,'/api/auth/reset-password',reset)[0]==200 and request(admin,'/api/auth/me')[0]==401,'La recuperación acepta una contraseña válida de 10 caracteres y revoca la sesión en Docker')
             check(request(admin,'/api/auth/login',{'email':email,'password':new_password})[0]==200 and request(admin,'/api/auth/reset-password',reset)[0]==400,'La nueva contraseña funciona y el enlace no se reutiliza en Docker')
             print(json.dumps({'passed':len(checks),'checks':checks},ensure_ascii=True,indent=2))
         except Exception:

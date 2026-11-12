@@ -12,6 +12,22 @@ form.addEventListener('submit',async (event) => {
   event.preventDefault(); errorBox.textContent = '';
   if (!servicesReady) { errorBox.textContent = 'Espera a que Hotels termine de conectar sus servicios.'; return; }
   const data = Object.fromEntries(new FormData(form));
+  const length = [...data.password].length;
+  if (length < 10 || length > 15) {
+    errorBox.textContent = 'La contraseña debe tener entre 10 y 15 caracteres.';
+    form.elements.password.focus();
+    return;
+  }
+  if (/\p{Cs}/u.test(data.password)) {
+    errorBox.textContent = 'La contraseña contiene un carácter inválido.';
+    form.elements.password.focus();
+    return;
+  }
+  if (!/[0-9]/.test(data.password) || !/[\p{P}\p{S}]/u.test(data.password)) {
+    errorBox.textContent = 'Incluye al menos un número y un símbolo especial, como !, @ o #.';
+    form.elements.password.focus();
+    return;
+  }
   if (data.password !== data.confirmPassword) { errorBox.textContent = 'Las contraseñas no coinciden.'; return; }
   const button = form.querySelector('button'); button.disabled = true;
   try {

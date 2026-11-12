@@ -5,6 +5,7 @@ import re
 import secrets
 import threading
 import time
+import unicodedata
 import uuid
 import postgres
 from urllib.parse import urlsplit
@@ -162,8 +163,12 @@ class Auth(Handler):
             if set(data) != {'token','password','confirmPassword'}:
                 raise APIError(400, 'Completa el enlace y la nueva contraseña dos veces.')
             password = data['password']
-            if not isinstance(password,str) or not 10 <= len(password) <= 128:
-                raise APIError(400, 'La contraseña debe tener entre 10 y 128 caracteres.')
+            if not isinstance(password, str) or not 10 <= len(password) <= 15:
+                raise APIError(400, 'La contraseña debe tener entre 10 y 15 caracteres.')
+            if any(unicodedata.category(char) == 'Cs' for char in password):
+                raise APIError(400, 'La contraseña contiene un carácter inválido.')
+            if not re.search(r'[0-9]', password) or not any(unicodedata.category(char).startswith(('P', 'S')) for char in password):
+                raise APIError(400, 'Incluye al menos un número y un símbolo especial, como !, @ o #.')
             if data['confirmPassword'] != password:
                 raise APIError(400, 'Las contraseñas no coinciden.')
             security.reset_password(data['token'],password)

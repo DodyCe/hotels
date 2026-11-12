@@ -154,8 +154,8 @@ paths:
               required: [token, password, confirmPassword]
               properties:
                 token: {type: string, pattern: '^[A-Za-z0-9_-]{43}$', writeOnly: true}
-                password: {type: string, minLength: 10, maxLength: 128, writeOnly: true}
-                confirmPassword: {type: string, minLength: 10, maxLength: 128, writeOnly: true}
+                password: {type: string, minLength: 10, maxLength: 15, description: 'Incluye al menos un dígito del 0 al 9 y un símbolo especial, como !, @ o #.', writeOnly: true}
+                confirmPassword: {type: string, minLength: 10, maxLength: 15, description: Debe coincidir con la nueva contraseña., writeOnly: true}
       responses:
         '200':
           description: Contraseña actualizada y sesiones anteriores revocadas.
