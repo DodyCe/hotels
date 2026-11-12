@@ -343,7 +343,7 @@ h1 em {
   border-radius: 0 0 15px 15px;
   box-shadow: 0 12px 25px #173f3b08;
   display: grid;
-  grid-template-columns: 1.5fr 1fr 1fr .8fr auto;
+  grid-template-columns: 1.5fr 1fr 1fr .8fr .8fr auto;
   align-items: center;
   border: 1px solid var(--line);
   gap: 19px;
@@ -1095,7 +1095,7 @@ dialog .button {
     margin-right: 12px;
     gap: 12px;
     padding: 18px 15px;
-    grid-template-columns: 1.3fr 1fr 1fr .7fr;
+    grid-template-columns: 1.3fr 1fr 1fr .75fr .75fr;
   }
 
   .search-button {
@@ -1428,9 +1428,7 @@ dialog .button {
   }
 
   .search > label:last-of-type {
-    grid-column: 1/-1;
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 12px;
+    border-right: 0;
   }
 
   .search input,

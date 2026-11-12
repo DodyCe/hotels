@@ -6,16 +6,30 @@ let hotels = [];
 const money = (value) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
 const dateText = (value) => new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value + 'T12:00:00'));
 const escapeHTML = (value) => String(value).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const localISO = (date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 // Mismo calendario que el servidor (common.validate_dates): hora de Montería, sin importar la zona del visitante.
 const hotelToday = () => {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map((p) => [p.type, p.value]));
   return `${parts.year}-${parts.month}-${parts.day}`;
 };
-const addDays = (iso, days) => { const date = new Date(iso + 'T12:00:00'); date.setDate(date.getDate() + days); return localISO(date); };
+const MAX_NIGHTS = 30;
+const dateMilliseconds = (iso) => Date.parse(iso + 'T00:00:00Z');
+const stayLength = (arrival, departure) => (dateMilliseconds(departure) - dateMilliseconds(arrival)) / 86400000;
+const validNights = (length) => Number.isInteger(length) && length >= 1 && length <= MAX_NIGHTS;
+const addDays = (iso, days) => new Date(dateMilliseconds(iso) + days * 86400000).toISOString().slice(0,10);
+const checkinInput = $('#checkin');
+const checkoutInput = $('#checkout');
+const nightsInput = $('#stay-nights');
 const today = hotelToday();
-$('#checkin').value = addDays(today, 7); $('#checkout').value = addDays(today, 10); $('#checkin').min = today;
-const state = { checkin: $('#checkin').value, checkout: $('#checkout').value, guests: 2, filter: 'all', sort: 'recommended', maxPrice: 0, selected: hotelCatalog[0].id, availability: {}, roomChoice: {}, user: null, online: false };
+for (let length = 1; length <= MAX_NIGHTS; length++) {
+  const option = new Option(`${length} ${length === 1 ? 'noche' : 'noches'}`, String(length), length === 3, length === 3);
+  nightsInput.add(option);
+}
+checkinInput.value = addDays(today, 7);
+checkinInput.min = today;
+syncCheckout();
+const state = { checkin: checkinInput.value, checkout: checkoutInput.value, guests: 2, filter: 'all', sort: 'recommended', maxPrice: 0, selected: hotelCatalog[0].id, availability: {}, roomChoice: {}, user: null, online: false };
+let availabilityRequest = 0;
+let pendingStay = null;
 let toastTimer, toastLeaveTimer, totalFrame, lastTotal = null;
 let modalOpener = null;
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -87,7 +101,15 @@ async function api(path, body) {
   }
   return data;
 }
-function nights() { return Math.round((Date.parse(state.checkout+'T00:00:00Z')-Date.parse(state.checkin+'T00:00:00Z'))/86400000); }
+function nights() { return stayLength(state.checkin, state.checkout); }
+function syncCheckout() {
+  const arrival = checkinInput.value;
+  if (!Number.isFinite(dateMilliseconds(arrival))) return;
+  checkoutInput.min = addDays(arrival, 1);
+  checkoutInput.max = addDays(arrival, MAX_NIGHTS);
+  const length = Number(nightsInput.value);
+  if (validNights(length)) checkoutInput.value = addDays(arrival, length);
+}
 function visibleHotels() {
   hotels = hotelCatalog.flatMap((hotel) => {
     const options = rooms.filter((room) => room.hotelId === hotel.id && room.capacity >= state.guests && (!state.maxPrice || room.price <= state.maxPrice) && (!state.online || state.availability[room.id] > 0));
@@ -139,19 +161,27 @@ function render() {
     $('#subtotal').textContent = money(selected.price*nights()); animateTotal(selected.price*nights());
   }
 }
-async function refreshAvailability() {
+async function refreshAvailability({checkin,checkout,guests} = pendingStay ?? state) {
+  const requestId = ++availabilityRequest;
   const list = $('#hotel-list');
   list.classList.add('loading'); list.setAttribute('aria-busy', 'true');
   $('#result-description').textContent = 'Actualizando disponibilidad…';
   try {
     const [catalogData, roomsData, availabilityData] = await Promise.all([
-      api('/hotels'), api('/rooms'), api(`/availability?checkin=${state.checkin}&checkout=${state.checkout}`)
+      api('/hotels'), api('/rooms'), api(`/availability?checkin=${checkin}&checkout=${checkout}`)
     ]);
+    if (requestId !== availabilityRequest) return;
+    Object.assign(state,{checkin,checkout,guests});
     hotelCatalog = catalogData.hotels; rooms = roomsData.rooms;
     state.availability = Object.fromEntries(availabilityData.availability.map((r) => [r.roomId,r.available]));
     state.online = true; $('#connection-note').textContent = '';
+  } catch (error) {
+    if (requestId === availabilityRequest) throw error;
   } finally {
-    list.classList.remove('loading'); list.removeAttribute('aria-busy'); render();
+    if (requestId === availabilityRequest) {
+      pendingStay = null;
+      list.classList.remove('loading'); list.removeAttribute('aria-busy'); render();
+    }
   }
 }
 function openModal(html) {
@@ -232,11 +262,13 @@ async function showAccount() {
 function showBooking() {
   if (!state.user) return showAuth('login',true);
   const hotel = hotels.find((h) => h.id === state.selected); if (!hotel) return;
-  openModal(`<p class="eyebrow">CONFIRMA TU PLAN</p><h2>Tu estancia en Montería</h2><p><strong>${hotel.name}</strong><br>${hotel.room}<br>${dateText(state.checkin)} – ${dateText(state.checkout)}<br>${state.guests} ${state.guests === 1 ? 'adulto' : 'adultos'} · ${nights()} ${nights() === 1 ? 'noche' : 'noches'}</p><p class="modal-total">Total de la estancia: <strong>${money(hotel.price*nights())} COP</strong></p><div class="auth-details"><strong>Huésped</strong>: ${escapeHTML(state.user.name)}<br><strong>Confirmación a</strong>: ${escapeHTML(state.user.email)}</div><form id="reservation-form"><p class="modal-hint">Revisa las fechas y los datos del huésped antes de confirmar. Esta operación no realiza ningún cobro.</p><p class="form-error" id="form-error" role="alert"></p><button type="submit" class="button primary">Confirmar reserva →</button></form>`);
+  const {checkin,checkout,guests} = state;
+  const length = stayLength(checkin,checkout);
+  openModal(`<p class="eyebrow">CONFIRMA TU PLAN</p><h2>Tu estancia en Montería</h2><p><strong>${hotel.name}</strong><br>${hotel.room}<br>${dateText(checkin)} – ${dateText(checkout)}<br>${guests} ${guests === 1 ? 'adulto' : 'adultos'} · ${length} ${length === 1 ? 'noche' : 'noches'}</p><p class="modal-total">Total de la estancia: <strong>${money(hotel.price*length)} COP</strong></p><div class="auth-details"><strong>Huésped</strong>: ${escapeHTML(state.user.name)}<br><strong>Confirmación a</strong>: ${escapeHTML(state.user.email)}</div><form id="reservation-form"><p class="modal-hint">Revisa las fechas y los datos del huésped antes de confirmar. Esta operación no realiza ningún cobro.</p><p class="form-error" id="form-error" role="alert"></p><button type="submit" class="button primary">Confirmar reserva →</button></form>`);
   $('#reservation-form').addEventListener('submit', (event) => {
     event.preventDefault();
     withBusy(event.target.querySelector('button'), async () => {
-      const result = await api('/reservations', {hotelId:hotel.id,roomId:hotel.roomId,checkin:state.checkin,checkout:state.checkout,guests:state.guests});
+      const result = await api('/reservations', {hotelId:hotel.id,roomId:hotel.roomId,checkin,checkout,guests});
       if (result.reservation.status === 'Pendiente') {
         openModal(`<h2>Reserva en proceso</h2><p>${result.reservation.id}</p><p>La solicitud está guardada. Estamos comprobando la disponibilidad. Consulta el estado en «Mis reservas»; te avisaremos cuando se confirme.</p><button class="button primary" id="pending-reservations">Ver mis reservas</button>`);
         $('#pending-reservations').addEventListener('click',showReservations);
@@ -316,16 +348,21 @@ if ('IntersectionObserver' in window) new IntersectionObserver(([entry]) => {
   $('#mobile-bar').classList.toggle('tucked', entry.isIntersecting); $('#mobile-bar').inert = entry.isIntersecting;
 }).observe($('.booking'));
 $('#search-form').addEventListener('submit', async (event) => {
-  event.preventDefault(); const a = $('#checkin').value, b = $('#checkout').value;
-  const length = (Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000;
-  if (a < hotelToday() || !Number.isFinite(length) || length < 1 || length > 30) { $('#search-error').textContent = 'Selecciona una estancia de 1 a 30 noches, con llegada desde hoy.'; $('#search-error').hidden = false; return; }
+  event.preventDefault();
+  const checkin = checkinInput.value, checkout = checkoutInput.value;
+  if (checkin < hotelToday() || !validNights(stayLength(checkin,checkout))) { $('#search-error').textContent = 'Selecciona una estancia de 1 a 30 noches, con llegada desde hoy.'; $('#search-error').hidden = false; return; }
   $('#search-error').hidden = true;
-  Object.assign(state,{checkin:a,checkout:b,guests:Number($('#guests').value)});
-  if (state.online) { try { await refreshAvailability(); } catch (error) { toast(error.message, 'error'); } } else render();
+  pendingStay = {checkin,checkout,guests:Number($('#guests').value)};
+  if (!state.online) { Object.assign(state,pendingStay); render(); }
+  try { await refreshAvailability(); } catch (error) { toast(error.message, 'error'); }
   $('#hoteles').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
 });
-$('#checkin').addEventListener('change', () => { if (Number.isNaN(new Date($('#checkin').value+'T12:00:00').getTime())) return; $('#checkout').min = addDays($('#checkin').value, 1); });
-$('#checkout').min = addDays($('#checkin').value, 1);
+checkinInput.addEventListener('change', syncCheckout);
+nightsInput.addEventListener('change', syncCheckout);
+checkoutInput.addEventListener('change', () => {
+  const length = stayLength(checkinInput.value,checkoutInput.value);
+  nightsInput.value = validNights(length) ? String(length) : '';
+});
 $('#reserve-button').addEventListener('click', showBooking);
 $('#my-reservations').addEventListener('click', showReservations);
 $('#notifications-button').addEventListener('click', showNotifications);

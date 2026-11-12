@@ -12,11 +12,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
-  <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="hotels.css">
+  <link rel="stylesheet" href="styles.css?v=stay-nights">
+  <link rel="stylesheet" href="hotels.css?v=stay-nights">
   <script src="catalog.js" defer></script>
   <script src="service-ready.js" defer></script>
-  <script src="app.js" defer></script>
+  <script src="app.js?v=stay-nights" defer></script>
 </head>
 <body>
   <a class="skip" href="#contenido">Saltar al contenido</a>
@@ -85,6 +85,12 @@
       <label>
         <span class="field-title">SALIDA</span>
         <input type="date" id="checkout" required>
+      </label>
+      <label>
+        <span class="field-title">NOCHES</span>
+        <select id="stay-nights" required>
+          <option value="" disabled>Elige las noches</option>
+        </select>
       </label>
       <label>
         <span class="field-title">HUÉSPEDES</span>

@@ -118,7 +118,7 @@ Registra una cuenta, consulta hoteles y disponibilidad, reserva, cancela y revis
 
 ### Buscar alojamiento
 
-1. En la página principal elige **llegada**, **salida** y **número de huéspedes**. El destino es Montería.
+1. En la página principal elige la **llegada**, el **número de noches** (de 1 a 30) y los **huéspedes**. La **salida** se calcula automáticamente. Si cambias la fecha de salida, se ajusta el número de noches.
 2. Pulsa **Buscar estancia**. Se muestran los hoteles con habitaciones disponibles en esas fechas.
 3. Filtra por servicios (Wi-Fi, Restaurante, Zona de trabajo), por precio máximo, u ordena por **Menor precio**.
 4. Elige el tipo de habitación. El panel **Tu estancia** muestra el total: tarifa por noche por número de noches.

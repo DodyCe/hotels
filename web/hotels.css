@@ -632,7 +632,7 @@ footer {
   }
 
   .search {
-    grid-template-columns: 1.3fr 1fr 1fr .8fr auto;
+    grid-template-columns: 1.3fr 1fr 1fr .75fr .8fr auto;
   }
 
   .search-button {
@@ -699,7 +699,7 @@ footer {
   }
 
   .search {
-    grid-template-columns: 1.3fr 1fr 1fr .8fr;
+    grid-template-columns: 1.3fr 1fr 1fr .75fr .8fr;
   }
 
   .search-button {
@@ -940,9 +940,7 @@ footer {
   }
 
   .search > label:last-of-type {
-    grid-column: 1/-1;
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 12px;
+    border-right: 0;
   }
 
   .search-button {
