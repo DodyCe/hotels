@@ -1,21 +1,30 @@
 """Inventario propio y ocupación por noche. Asignación y liberación idempotentes."""
 import datetime as dt
 import json
+import re
 import postgres
 import validation
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
-from common import APIError, Handler, admin_for, connect, serve, validate_dates
+from urllib.parse import parse_qs, quote, urlsplit
+from common import APIError, Handler, ROOMS, admin_for, connect, internal_request, serve, validate_dates
 
 seed = json.loads((Path(__file__).resolve().parents[1] / 'seed' / 'inventory.json').read_text(encoding='utf-8'))
 with connect('availability') as db:
     if postgres.database_url('availability'):
         postgres.initialize('availability', db)
+        db.execute('SELECT 1 FROM room_numbers LIMIT 1')
     else:
         db.executescript('''
         CREATE TABLE IF NOT EXISTS inventory (room_id TEXT PRIMARY KEY, total INTEGER NOT NULL CHECK(total>=1));
         CREATE TABLE IF NOT EXISTS allocations (reservation_id TEXT PRIMARY KEY, room_id TEXT NOT NULL DEFAULT '', checkin TEXT NOT NULL DEFAULT '', checkout TEXT NOT NULL DEFAULT '', status TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS allocation_dates ON allocations(room_id,status,checkin,checkout);
+        CREATE TABLE IF NOT EXISTS room_numbers (
+            hotel_id TEXT NOT NULL,
+            number TEXT NOT NULL,
+            room_id TEXT NOT NULL REFERENCES inventory(room_id) ON DELETE CASCADE,
+            PRIMARY KEY(hotel_id,number)
+        );
+        CREATE INDEX IF NOT EXISTS room_numbers_by_type ON room_numbers(room_id);
         ''')
         db.executemany('INSERT OR IGNORE INTO inventory VALUES (:roomId,:total)', seed)
 
@@ -67,6 +76,42 @@ def future_peak(db, room):
         peak = max(peak,occupied)
     return peak
 
+
+def physical_numbers(values, total):
+    if not isinstance(values, list) or len(values) > total:
+        raise APIError(400, 'Los números físicos deben ser una lista con un máximo de un número por unidad.')
+    numbers = []
+    for value in values:
+        number = value.strip() if isinstance(value, str) else ''
+        if len(number) > 12 or not re.fullmatch(r'[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*', number):
+            raise APIError(400, 'Cada número físico debe tener hasta 12 caracteres: letras, números o guiones, como 101-A.')
+        numbers.append(number.upper())
+    if len(set(numbers)) != len(numbers):
+        raise APIError(400, 'Hay números físicos repetidos en la lista.')
+    return numbers
+
+
+def inventory_numbers(db, room):
+    rows = db.execute('SELECT number FROM room_numbers WHERE room_id=? ORDER BY number', (room,)).fetchall()
+    return [row['number'] for row in rows]
+
+
+def replace_numbers(db, hotel, room, numbers):
+    db.execute('DELETE FROM room_numbers WHERE room_id=?', (room,))
+    if not numbers:
+        return
+    values = ','.join(['(?,?,?)'] * len(numbers))
+    params = tuple(value for number in numbers for value in (hotel,number,room))
+    inserted = db.execute(
+        f'INSERT INTO room_numbers(hotel_id,number,room_id) VALUES {values} '
+        'ON CONFLICT(hotel_id,number) DO NOTHING RETURNING number',
+        params,
+    ).fetchall()
+    if len(inserted) != len(numbers):
+        saved = {row['number'] for row in inserted}
+        conflict = next(number for number in numbers if number not in saved)
+        raise APIError(409, f'El número {conflict} ya pertenece a otro tipo de habitación de este hotel.')
+
 class Availability(Handler):
     service_name = 'disponibilidad-inventario'
     database_name = 'availability'
@@ -86,21 +131,45 @@ class Availability(Handler):
                     db.execute('INSERT OR IGNORE INTO inventory(room_id,total) VALUES (?,?)',(room,total))
                 row = db.execute('SELECT total FROM inventory WHERE room_id=?',(room,)).fetchone()
             return self.respond(200,{'inventory':{'roomId':room,'total':row['total']}})
-        if self.command == 'PUT' and url.path.startswith('/inventory/'):
+        if self.command in ('GET', 'PUT') and url.path.startswith('/inventory/'):
             admin_for(self)
             room = url.path.removeprefix('/inventory/')
-            total = validation.integer(self.body().get('total'),'Las unidades',1,1000)
+            if self.command == 'GET':
+                with connect('availability') as db:
+                    row = db.execute(
+                        'SELECT i.total,n.number FROM inventory i LEFT JOIN room_numbers n ON n.room_id=i.room_id WHERE i.room_id=? ORDER BY n.number',
+                        (room,),
+                    ).fetchall()
+                    if not row:
+                        raise APIError(404,'Habitación no registrada en inventario.')
+                    numbers = [item['number'] for item in row if item['number'] is not None]
+                return self.respond(200,{'inventory':{'roomId':room,'total':row[0]['total'],'roomNumbers':numbers}})
+            data = self.body()
+            total = validation.integer(data.get('total'),'Las unidades',1,1000)
+            numbers = physical_numbers(data['roomNumbers'], total) if 'roomNumbers' in data else None
+            hotel = None
+            if numbers is not None:
+                hotel = internal_request(ROOMS, '/rooms/'+quote(room,safe='')+'?includeInactive=true',
+                                         cookie=self.headers.get('Cookie',''))['room']['hotelId']
             with connect('availability') as db:
                 if not postgres.database_url('availability'):
                     db.execute('BEGIN IMMEDIATE')
+                elif hotel is not None:
+                    db.execute('SELECT pg_advisory_xact_lock(hashtextextended(?,0))', ('room-numbers:'+hotel,))
                 lock_room(db,room)
                 if not db.execute('SELECT room_id FROM inventory WHERE room_id=?',(room,)).fetchone():
                     raise APIError(404,'Habitación no registrada en inventario.')
                 peak = future_peak(db,room)
                 if total < peak:
                     raise APIError(409,'Hay '+str(peak)+' unidades comprometidas; no puedes reducir el inventario por debajo de las reservas vigentes.')
+                if numbers is None:
+                    numbers = inventory_numbers(db,room)
+                    if total < len(numbers):
+                        raise APIError(409,'Retira los números físicos que correspondan antes de reducir las unidades.')
+                else:
+                    replace_numbers(db,hotel,room,numbers)
                 db.execute('UPDATE inventory SET total=? WHERE room_id=?',(total,room))
-            return self.respond(200,{'inventory':{'roomId':room,'total':total}})
+            return self.respond(200,{'inventory':{'roomId':room,'total':total,'roomNumbers':sorted(numbers)}})
         if self.command == 'GET' and url.path == '/inventory':
             with connect('availability') as db:
                 ordering = 'sort_order,room_id' if postgres.database_url('availability') else 'rowid'

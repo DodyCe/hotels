@@ -1128,10 +1128,36 @@ paths:
           type: string
       description: El correo de una cuenta vinculada no se cambia aquí. No se pueden modificar roles ni cuentas administradoras.
   /inventory/{roomId}:
+    parameters:
+    - name: roomId
+      in: path
+      required: true
+      schema:
+        type: string
+    get:
+      tags: [Disponibilidad]
+      summary: Consultar unidades y números físicos de un tipo de habitación
+      operationId: getInventoryDetails
+      security:
+      - session: []
+      responses:
+        '200':
+          description: Inventario y números físicos del tipo de habitación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryResponse'
+        '401':
+          description: Sesión requerida.
+        '403':
+          description: Se requiere el rol admin.
+        '404':
+          description: Tipo de habitación sin inventario.
     put:
       tags:
       - Disponibilidad
-      summary: Modificar unidades sin reducirlas por debajo de las reservas vigentes
+      summary: Modificar unidades y números físicos
+      description: El total no puede ser inferior a las unidades comprometidas. Los números físicos no se repiten dentro del mismo hotel.
       operationId: updateInventory
       security:
       - session: []
@@ -1167,7 +1193,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Conflicto de correo, estado o inventario.
+          description: Un número ya está asignado en el mismo hotel o el total dejaría unidades comprometidas o numeradas fuera del inventario.
           content:
             application/json:
               schema:
@@ -1184,12 +1210,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/InventoryUpdate'
-      parameters:
-      - name: roomId
-        in: path
-        required: true
-        schema:
-          type: string
 components:
   securitySchemes:
     session:
@@ -1720,6 +1740,9 @@ components:
           type: integer
           minimum: 1
           maximum: 1000
+        roomNumbers:
+          description: Si se omite, conserva los números existentes. Una lista vacía los retira. Se guardan en mayúsculas y no puede haber más números que unidades.
+          $ref: '#/components/schemas/PhysicalRoomNumbers'
       required:
       - total
     InventoryResponse:
@@ -1727,9 +1750,24 @@ components:
       additionalProperties: false
       properties:
         inventory:
-          $ref: '#/components/schemas/InventoryItem'
+          allOf:
+          - $ref: '#/components/schemas/InventoryItem'
+          - type: object
+            properties:
+              roomNumbers:
+                $ref: '#/components/schemas/PhysicalRoomNumbers'
+            required: [roomNumbers]
       required:
       - inventory
+    PhysicalRoomNumbers:
+      type: array
+      maxItems: 1000
+      uniqueItems: true
+      items:
+        type: string
+        maxLength: 12
+        pattern: '^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$'
+        example: '101-A'
     Guest:
       type: object
       additionalProperties: false

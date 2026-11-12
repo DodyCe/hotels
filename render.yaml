@@ -296,6 +296,11 @@ services:
       envVarKey: RENDER_EXTERNAL_URL
   - key: AVAILABILITY_DATABASE_URL
     sync: false
+  - key: ROOMS_URL
+    fromService:
+      type: web
+      name: hotels-rooms
+      envVarKey: RENDER_EXTERNAL_URL
 envVarGroups:
 - name: hotels-runtime
   envVars:

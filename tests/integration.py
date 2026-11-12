@@ -251,6 +251,21 @@ def admin_checks(customer,data_dir,password,email):
     check(request(admin,'/api/inventory/'+room,{'total':1},method='PUT')[0]==409,'Inventario rechaza reducciones que causarían sobreventa')
     check(request(customer,'/api/inventory/'+room,{'total':3},method='PUT')[0]==403,'Solo administración puede ajustar unidades')
     check(request(admin,'/api/inventory/'+room,{'total':3},method='PUT')[1]['inventory']['total']==3,'Administración ajusta unidades en el servicio de Inventario')
+    inventory_path='/api/inventory/'+room
+    check(request(customer,inventory_path)[0]==403,'Solo administración puede leer los números físicos')
+    check(request(admin,inventory_path)[1]['inventory']['roomNumbers']==[],'El inventario existente puede comenzar sin números físicos')
+    code,result,_=request(admin,inventory_path,{'total':3,'roomNumbers':['101','102-a']},method='PUT')
+    check(code==200 and result['inventory']['roomNumbers']==['101','102-A'],'Se guarda una numeración parcial y se normalizan las letras')
+    check(request(admin,inventory_path,{'total':1,'roomNumbers':['101','102-A']},method='PUT')[0]==400,'No se permiten más números físicos que unidades')
+    check(request(admin,inventory_path,{'total':3,'roomNumbers':['101-a','101-A']},method='PUT')[0]==400,'No se permiten números repetidos en la misma lista')
+    code,result,_=request(admin,'/api/rooms',{'hotelId':hid,'name':'Suite de prueba','capacity':2,'price':145000,'total':1})
+    assert code==201
+    suite_path='/api/inventory/'+result['room']['id']
+    assert request(admin,suite_path,{'total':1,'roomNumbers':['103']},method='PUT')[0]==200
+    check(request(admin,suite_path,{'total':1,'roomNumbers':['101']},method='PUT')[0]==409 and
+          request(admin,suite_path)[1]['inventory']['roomNumbers']==['103'],'Un número duplicado en el hotel no reemplaza la numeración anterior')
+    check(request(admin,'/api/inventory/ghl-monteria-principal',{'total':1,'roomNumbers':['101']},method='PUT')[0]==200,'Dos hoteles pueden usar el mismo número físico')
+    check(request(admin,inventory_path,{'total':3},method='PUT')[1]['inventory']['roomNumbers']==['101','102-A'],'Cambiar solo el total conserva los números físicos')
     check(request(admin,'/api/rooms/'+room,method='DELETE')[1]['room']['active'] is False,'Retirar una habitación conserva el registro histórico')
     check(request(customer,'/api/rooms/'+room)[0]==404,'Las habitaciones inactivas no se ofrecen al público')
     check(request(admin,'/api/rooms/'+room,{'active':True},method='PATCH')[1]['room']['active'],'Una habitación se puede reactivar')

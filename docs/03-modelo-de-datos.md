@@ -156,6 +156,7 @@ erDiagram
 ```mermaid
 erDiagram
   inventory ||--o{ allocations : "room_id"
+  inventory ||--o{ room_numbers : "room_id"
   inventory {
     text room_id PK "referencia lógica a Habitaciones"
     int total "unidades, mínimo 1"
@@ -168,11 +169,17 @@ erDiagram
     text checkout
     text status "Asignada o Liberada"
   }
+  room_numbers {
+    text hotel_id PK "referencia lógica al hotel"
+    text number PK "número físico único en el hotel"
+    text room_id FK "tipo de habitación en inventario"
+  }
 ```
 
 - Una unidad está ocupada en una noche si existe una asignación `Asignada` que cubre esa noche. La fecha de salida no ocupa noche.
 - Índice por `room_id`, `status`, `checkin` y `checkout` para calcular la disponibilidad en una sola consulta.
 - Una asignación `Liberada` no se puede volver a asignar; así una petición tardía no reactiva una reserva cancelada.
+- `room_numbers` guarda los números que registra administración. Las unidades aún sin número se cuentan en `inventory.total`. Las asignaciones de reserva identifican el tipo de habitación.
 
 ## 3.7 Referencias entre dominios
 
