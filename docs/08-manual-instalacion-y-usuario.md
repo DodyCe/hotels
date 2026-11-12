@@ -172,7 +172,7 @@ Pulsa la campana. Cada aviso muestra asunto, contenido y estado de envío:
 Entra a **Administración** (o `/admin.html`). Tiene tres pestañas: **Hoteles**, **Habitaciones** y **Huéspedes**.
 
 - **Hoteles:** **Nuevo hotel** abre el formulario (nombre, zona, dirección, descripción, servicios, comodidades). Cada fila permite editar, **Retirar** o **Reactivar**. Un hotel retirado deja de mostrarse y no acepta reservas nuevas; sus reservas anteriores se conservan.
-- **Habitaciones:** **Nueva habitación** pide hotel, nombre, capacidad, tarifa y **Unidades iniciales**. Al guardar, el sistema crea las unidades en Inventario. Desde la fila se ajustan las **Unidades de inventario**; no se puede bajar del número de reservas futuras.
+- **Habitaciones:** pulsa **Ver habitaciones** en la tarjeta del hotel que quieres gestionar. Allí puedes editar, retirar o reactivar sus habitaciones y ajustar el **Inventario**. **Nueva habitación** crea un tipo de habitación en ese hotel con su capacidad, tarifa y unidades iniciales. El inventario no puede bajar de las unidades comprometidas por reservas vigentes. Usa **Volver a los hoteles** para elegir otro.
 - **Huéspedes:** **Nuevo huésped** crea un perfil sin contraseña. Retirar un huésped con cuenta cierra sus sesiones y le impide entrar. Las cuentas administradoras no se pueden retirar desde aquí.
 
 **Actualizar** recarga la lista. Una cuenta sin rol admin ve "Acceso restringido".

@@ -25,7 +25,11 @@
     <section id="admin-workspace" hidden>
       <div class="admin-stats" id="admin-stats"></div>
       <div class="admin-toolbar"><div class="admin-tabs" role="group" aria-label="Sección de administración"><button type="button" data-tab="hotels" aria-pressed="true">Hoteles</button><button type="button" data-tab="rooms" aria-pressed="false">Habitaciones</button><button type="button" data-tab="guests" aria-pressed="false">Huéspedes</button></div><button type="button" class="button primary" id="add-record">Nuevo hotel</button></div>
-      <div class="admin-controls"><label>Buscar<input id="admin-search" type="search" placeholder="Nombre, correo o ubicación"></label><label class="admin-check"><input id="include-archived" type="checkbox"> Mostrar inactivos</label><button type="button" class="button secondary" id="reload-records">Actualizar</button></div>
+      <div id="room-hotel-context" class="admin-room-context" hidden>
+        <button type="button" class="button secondary" id="back-to-room-hotels">← Volver a los hoteles</button>
+        <h2 id="room-hotel-title" tabindex="-1"></h2>
+      </div>
+      <div class="admin-controls"><label><span id="admin-search-label">Buscar hoteles</span><input id="admin-search" type="search" placeholder="Nombre o ubicación"></label><label class="admin-check" id="archived-control"><input id="include-archived" type="checkbox"> Mostrar inactivos</label><button type="button" class="button secondary" id="reload-records">Actualizar</button></div>
       <div id="admin-records" class="admin-records" aria-live="polite"></div>
       <p class="admin-footnote">Al retirar un registro se desactiva su uso futuro. Las reservas y sus datos históricos se conservan. Los huéspedes sin cuenta pueden registrarse posteriormente con su correo.</p>
     </section>
